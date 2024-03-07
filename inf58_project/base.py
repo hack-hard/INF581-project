@@ -1,5 +1,7 @@
 import torch
+import torch.nn as nn
 from torch.nn import ReLU
+from itertools import chain
 """
 inf58_project base module.
 
@@ -14,26 +16,43 @@ If you want to replace this with a Flask application run:
 
 and then choose `flask` as template.
 """
-class CuriosityAgent(torch.nn.Module):
+def sequentialStack(channels:list[int]):
+    modules = chain.from_iterable( (nn.Linear(channels[i],channels[i+1]), nn.ReLU()) for i in range(len(channels) -1 )) 
+    return nn.Sequential(*modules)
+
+class EncodeAction(nn.Module):
+    def __init__(self, state_dim, embedding_dim, action_dim,*,channels_embedding : list[int] = [],channels_action : list[int] = [] ):
+        super(EncodeAction,self).__init__()
+        self.embedding = sequentialStack([state_dim] + channels_embedding)
+        self.predict_action = sequentialStack([2*self.embedding_dim] + channels_action + [action_dim] )
+    def loss(self,state:torch.tensor, next_state:torch.tensor):
+        pass
+
+class ICM(nn.Module):
+    def __init__(self, state_dim, action_dim,*,channels_next_state : list[int]):
+        super(ICM,self).__init__()
+        self.predict_next_state = sequentialStack([ action_dim + self.embedding_dim] + channels_next_state)
+
+class CuriosityAgent(nn.Module):
     def __init__(self, channels, state_dim, action_dim):
         super(CuriosityAgent, self).__init__()
-        self.vision = torch.nn.Sequential(
-            torch.nn.Linear(state_dim,channels[0]),
-            torch.nn.ReLU(),
-            torch.nn.Linear(channels[1],channels[2]),
-            torch.nn.ReLU(),
+        self.vision = nn.Sequential(
+            nn.Linear(state_dim,channels[0]),
+            nn.ReLU(),
+            nn.Linear(channels[1],channels[2]),
+            nn.ReLU(),
             )
-        self.q_value = torch.nn.Sequential(
-            torch.nn.Linear(channels[3],channels[4]),
-            torch.nn.ReLU(),
-            torch.nn.Linear(channels[5],action_dim),
-            torch.nn.ReLU(),
+        self.q_value = nn.Sequential(
+            nn.Linear(channels[3],channels[4]),
+            nn.ReLU(),
+            nn.Linear(channels[5],action_dim),
+            nn.ReLU(),
         )
-        self.curiosity = torch.nn.Sequential(
-            torch.nn.Linear(channels[3] + action_dim,channels[6]),
-            torch.nn.ReLU(),
-            torch.nn.Linear(channels[6],state_dim),
-            torch.nn.ReLU(),
+        self.curiosity = nn.Sequential(
+            nn.Linear(channels[3] + action_dim,channels[6]),
+            nn.ReLU(),
+            nn.Linear(channels[6],state_dim),
+            nn.ReLU(),
         )
 
     def forward(self, x):
