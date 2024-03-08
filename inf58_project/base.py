@@ -43,16 +43,19 @@ class ICM(nn.Module):
         return torch.norm(next_state - self(state,action))
 
 class CuriosityAgent(nn.Module):
-    def __init__(self,state_dim, action_dim,*, encoding_dim, q_channels = [], encoding_channels = [], curiosity_channels = []):
+    def __init__(self,state_dim, action_dim,*, encoding_dim, q_channels = [], encoding_channels = [], curiosity_channels = [],critic_channels = []):
         super(CuriosityAgent, self).__init__()
         self.q_agent = sequentialStack([state_dim]+ q_channels + [action_dim]) 
+        self.p_critic = sequentialStack([state_dim]+ critic_channels + [action_dim]) 
         self.embedding = EncodeAction(state_dim,encoding_dim,action_dim,channels_embedding=encoding_channels)
         self.curiosity = ICM(encoding_dim,action_dim,channels_next_state=curiosity_channels)
         
     def forward(self,state):
-        return self.q_agent(state)
+        return torch.softmax(self.q_agent(state))
+    def critic(self,state):
+        return self.p_critic(state)
 
     def loss(self,state,action,next_state):
         return self.embedding(state,action,next_state)
-def reward(self,state,action,next_state):
+    def reward(self,state,action,next_state):
         return self.curiosity(self.embedding(state),action,self.embedding(next_state))
