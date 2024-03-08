@@ -32,6 +32,8 @@ class ICM(nn.Module):
     def __init__(self, state_dim, action_dim,*,channels_next_state : list[int]):
         super(ICM,self).__init__()
         self.predict_next_state = sequentialStack([ action_dim + self.embedding_dim] + channels_next_state)
+    def loss(self,state:torch.tensor, action:torch.tensor):
+        pass
 
 class CuriosityAgent(nn.Module):
     def __init__(self, channels, state_dim, action_dim):
