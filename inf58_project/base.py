@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from torch.nn import ReLU
 from itertools import chain
 """
 inf58_project base module.
@@ -23,43 +22,37 @@ def sequentialStack(channels:list[int]):
 class EncodeAction(nn.Module):
     def __init__(self, state_dim, embedding_dim, action_dim,*,channels_embedding : list[int] = [],channels_action : list[int] = [] ):
         super(EncodeAction,self).__init__()
-        self.embedding = sequentialStack([state_dim] + channels_embedding)
+        self.embedding = sequentialStack([state_dim] + channels_embedding + [embedding_dim])
         self.predict_action = sequentialStack([2*self.embedding_dim] + channels_action + [action_dim] )
-    def loss(self,state:torch.tensor, next_state:torch.tensor):
-        pass
+    def forward(self,state):
+        return self.embedding(state)
+
+    def predict_action(self,state:torch.Tensor, next_state:torch.Tensor):
+        return torch.cat((self(state),self(next_state)),dim = -1) 
+
+    def loss(self,state:torch.Tensor, next_state:torch.Tensor, action:torch.Tensor):
+        return torch.norm(action - self.predict_action(state,next_state))
 
 class ICM(nn.Module):
     def __init__(self, state_dim, action_dim,*,channels_next_state : list[int]):
         super(ICM,self).__init__()
-        self.predict_next_state = sequentialStack([ action_dim + self.embedding_dim] + channels_next_state)
-    def loss(self,state:torch.tensor, action:torch.tensor):
-        pass
+        self.predict_next_state = sequentialStack([ action_dim + state_dim] + channels_next_state)
+    def forward(self,state:torch.Tensor, action:torch.Tensor):
+        return self.predict_next_state(torch.cat((state,action)),dim = -1) 
+    def reward(self,state:torch.Tensor, action:torch.Tensor, next_state:torch.Tensor):
+        return torch.norm(next_state - self(state,action))
 
 class CuriosityAgent(nn.Module):
-    def __init__(self, channels, state_dim, action_dim):
+    def __init__(self,state_dim, action_dim,*, encoding_dim, q_channels = [], encoding_channels = [], curiosity_channels = []):
         super(CuriosityAgent, self).__init__()
-        self.vision = nn.Sequential(
-            nn.Linear(state_dim,channels[0]),
-            nn.ReLU(),
-            nn.Linear(channels[1],channels[2]),
-            nn.ReLU(),
-            )
-        self.q_value = nn.Sequential(
-            nn.Linear(channels[3],channels[4]),
-            nn.ReLU(),
-            nn.Linear(channels[5],action_dim),
-            nn.ReLU(),
-        )
-        self.curiosity = nn.Sequential(
-            nn.Linear(channels[3] + action_dim,channels[6]),
-            nn.ReLU(),
-            nn.Linear(channels[6],state_dim),
-            nn.ReLU(),
-        )
+        self.q_agent = sequentialStack([state_dim]+ q_channels + [action_dim]) 
+        self.embedding = EncodeAction(state_dim,encoding_dim,action_dim,channels_embedding=encoding_channels)
+        self.curiosity = ICM(encoding_dim,action_dim,channels_next_state=curiosity_channels)
+        
+    def forward(self,state):
+        return self.q_agent(state)
 
-    def forward(self, x):
-        feature = self.vision(x)
-        values = self.q_value(feature)
-        for i in range(len(self.action_dim)):
-            values += self.norm(feature,self.curiosity(torch.cat((feature,embedding(i,self.action_dim)))
-        return x
+    def loss(self,state,action,next_state):
+        return self.embedding(state,action,next_state)
+def reward(self,state,action,next_state):
+        return self.curiosity(self.embedding(state),action,self.embedding(next_state))
