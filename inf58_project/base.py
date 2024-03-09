@@ -15,11 +15,15 @@ If you want to replace this with a Flask application run:
 
 and then choose `flask` as template.
 """
-def sequentialStack(channels:list[int]):
+def sequentialStack(channels:list[int]) -> nn.Sequential:
     modules = chain.from_iterable( (nn.Linear(channels[i],channels[i+1]), nn.ReLU()) for i in range(len(channels) -1 )) 
     return nn.Sequential(*modules)
 
 class EncodeAction(nn.Module):
+    """
+    A neural network model that reduce the dimention of the state space.
+    To train this model, you have to reduce the loss. You do not maximize a reward.
+    """
     def __init__(self, state_dim, embedding_dim, action_dim,*,channels_embedding : list[int] = [],channels_action : list[int] = [] ):
         super(EncodeAction,self).__init__()
         self.embedding = sequentialStack([state_dim] + channels_embedding + [embedding_dim])
@@ -34,6 +38,9 @@ class EncodeAction(nn.Module):
         return torch.norm(action - self.predict_action(state,next_state))
 
 class ICM(nn.Module):
+    """
+    Intrinsic curiosity module. Given a state and an action, the model will predict the next state. 
+    """
     def __init__(self, state_dim, action_dim,*,channels_next_state : list[int]):
         super(ICM,self).__init__()
         self.predict_next_state = sequentialStack([ action_dim + state_dim] + channels_next_state)
