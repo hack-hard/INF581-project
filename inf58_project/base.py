@@ -18,13 +18,21 @@ and then choose `flask` as template.
 """
 
 
-def sequentialStack(channels: list[int]) -> nn.Sequential:
+def sequential_stack(channels: list[int]) -> nn.Sequential:
+    """
+    A function that return a dense sequential network parametrised by channels. 
+    """
     modules = chain.from_iterable(
         (nn.Linear(channels[i], channels[i + 1]), nn.ReLU())
         for i in range(len(channels) - 1)
     )
     return nn.Sequential(*modules)
-
+def policy_stack(channels: list[int]):
+    """
+    Return a requential stack representing a policy actor over a discrete action space.
+    Output represents the probabilities of taking a given action.
+    """
+    return sequential_stack(channels) + nn.Sequential(nn.Softmax(channels[-1]))
 
 class EncodeAction(nn.Module):
     """
@@ -34,18 +42,18 @@ class EncodeAction(nn.Module):
 
     def __init__(
         self,
-        state_dim,
-        embedding_dim,
-        action_dim,
+        state_dim : int,
+        embedding_dim : int,
+        action_dim : int,
         *,
         channels_embedding: list[int] = [],
         channels_action: list[int] = []
     ):
         super(EncodeAction, self).__init__()
-        self.embedding = sequentialStack(
+        self.embedding = sequential_stack(
             [state_dim] + channels_embedding + [embedding_dim]
         )
-        self.predict_action = sequentialStack(
+        self.predict_action = sequential_stack(
             [2 * self.embedding_dim] + channels_action + [action_dim]
         )
 
@@ -66,7 +74,7 @@ class ICM(nn.Module):
 
     def __init__(self, state_dim, action_dim, *, channels_next_state: list[int]):
         super(ICM, self).__init__()
-        self.predict_next_state = sequentialStack(
+        self.predict_next_state = sequential_stack(
             [action_dim + state_dim] + channels_next_state
         )
 
@@ -92,8 +100,8 @@ class CuriosityAgent(nn.Module):
         critic_channels=[]
     ):
         super(CuriosityAgent, self).__init__()
-        self.q_agent = sequentialStack([state_dim] + q_channels + [action_dim])
-        self.p_critic = sequentialStack([state_dim] + critic_channels + [action_dim])
+        self.pi_agent = policy_stack([state_dim] + q_channels + [action_dim])
+        self.adventage_critic = sequential_stack([state_dim] + critic_channels + [action_dim])
         self.embedding = EncodeAction(
             state_dim, encoding_dim, action_dim, channels_embedding=encoding_channels
         )
@@ -102,10 +110,10 @@ class CuriosityAgent(nn.Module):
         )
 
     def forward(self, state):
-        return torch.softmax(self.q_agent(state))
+        return self.pi_agent(state)
 
     def critic(self, state):
-        return self.p_critic(state)
+        return self.adventage_critic(state)
 
     def loss(self, state, action, next_state):
         return self.embedding(state, action, next_state)
