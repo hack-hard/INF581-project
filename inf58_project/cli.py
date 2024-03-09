@@ -7,6 +7,10 @@ Be creative! do whatever you want!
 - Start a web application
 - Import things from your .base module
 """
+import gymnasium
+import numpy
+import time
+import stable_baselines3
 
 
 def main():  # pragma: no cover
