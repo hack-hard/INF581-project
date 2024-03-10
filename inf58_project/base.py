@@ -21,6 +21,7 @@ and then choose `flask` as template.
 def sequential_stack(channels: list[int]) -> nn.Sequential:
     """
     A function that return a dense sequential network parametrised by channels. 
+    Converts [d1, ..., dn] to a network with ReLU(Linear(d1, d2)), ..., ReLU(Linear(dn-1, dn))
     """
     modules = chain.from_iterable(
         (nn.Linear(channels[i], channels[i + 1]), nn.ReLU())
@@ -53,7 +54,7 @@ class EncodeAction(nn.Module):
         self.embedding = sequential_stack(
             [state_dim] + channels_embedding + [embedding_dim]
         )
-        self.predict_action = sequential_stack(
+        self.action_predictor = sequential_stack(
             [2 * self.embedding_dim] + channels_action + [action_dim]
         )
 
@@ -61,7 +62,7 @@ class EncodeAction(nn.Module):
         return self.embedding(state)
 
     def predict_action(self, state: torch.Tensor, next_state: torch.Tensor):
-        return torch.cat((self(state), self(next_state)), dim=-1)
+        return self.action_predictor(torch.cat((self(state), self(next_state)), dim=-1))
 
     def loss(self, state: torch.Tensor, next_state: torch.Tensor, action: torch.Tensor):
         return torch.norm(action - self.predict_action(state, next_state))
@@ -93,10 +94,10 @@ class CuriosityAgent(nn.Module):
         state_dim,
         action_dim,
         *,
-        encoding_dim,
+        encoding_dim=32,
         q_channels=[],
-        encoding_channels=[],
-        curiosity_channels=[],
+        encoding_channels=[128],
+        curiosity_channels=[128],
         critic_channels=[]
     ):
         super(CuriosityAgent, self).__init__()

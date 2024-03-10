@@ -10,6 +10,8 @@ Be creative! do whatever you want!
 import gymnasium
 import numpy
 import time
+import stable_baselines3
+
 
 def main():  # pragma: no cover
     """
@@ -43,7 +45,7 @@ def main():  # pragma: no cover
             env.render()
             obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
             done = terminated or truncated
-            time.sleep(1./30)
+            time.sleep(0)
             print(reward)
     
     env.close()
