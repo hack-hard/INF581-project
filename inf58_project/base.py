@@ -17,7 +17,8 @@ If you want to replace this with a Flask application run:
 and then choose `flask` as template.
 """
 
-
+def cross_entropy(true_val,pred_val):
+    return -torch.sum( true_val * torch.log(pred_val),dim = -1)
 def sequential_stack(channels: list[int]) -> nn.Sequential:
     """
     A function that return a dense sequential network parametrised by channels. 
@@ -53,7 +54,7 @@ class EncodeAction(nn.Module):
         self.embedding = sequential_stack(
             [state_dim] + channels_embedding + [embedding_dim]
         )
-        self.predict_action = sequential_stack(
+        self.predict_action = policy_stack(
             [2 * self.embedding_dim] + channels_action + [action_dim]
         )
 
@@ -63,8 +64,8 @@ class EncodeAction(nn.Module):
     def predict_action(self, state: torch.Tensor, next_state: torch.Tensor):
         return torch.cat((self(state), self(next_state)), dim=-1)
 
-    def loss(self, state: torch.Tensor, next_state: torch.Tensor, action: torch.Tensor):
-        return torch.norm(action - self.predict_action(state, next_state))
+    def loss(self, state: torch.Tensor, next_state: torch.Tensor, action_proba: torch.Tensor):
+        return cross_entropy(action_proba,self.predict_action(state, next_state))
 
 
 class ICM(nn.Module):
