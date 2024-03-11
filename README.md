@@ -1,4 +1,4 @@
-# Annonymous submission for the inf581 project.
+# Anonymous submission for the inf581 project.
 ## Installing the environnement
 At the root of the project
 ```bash
