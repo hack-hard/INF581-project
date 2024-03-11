@@ -117,7 +117,7 @@ class CuriosityAgent(nn.Module):
         action_dim,
         encoding_dim=20,
         *,
-        l: int = 1,
+        l: float = 1.,
         channels_embedding: list[int] = [],
         channels_action: list[int] = [],
         channels_next_state: list[int] = [],
