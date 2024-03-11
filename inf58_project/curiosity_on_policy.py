@@ -291,7 +291,7 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
             # adding intrinsic reward (curiosity)
             intrinsic_rewards = (
                 self.curiosity.reward(
-                    obs_as_tensor(self._last_obs, self.device).to(th.float32)/256,
+                    obs_as_tensor(self._last_obs, self.device).to(th.float32) / 256,
                     action_as_probability_tensor(clipped_actions[0], env.action_space.n)
                     .to(self.device)
                     .to(th.float32),
