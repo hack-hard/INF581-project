@@ -256,10 +256,10 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
                     clipped_actions = np.clip(actions, self.action_space.low, self.action_space.high)
 
             new_obs, rewards, dones, infos = env.step(clipped_actions)
-            print(new_obs,clipped_actions,self._last_obs)
+            print(obs_as_tensor(self._last_obs,self.device),clipped_actions.dtype,self._last_obs.dtype)
 
             # adding intrinsic reward (curiosity)
-            intrinsic_rewards = self.curiosity.reward(obs_as_tensor(self._last_obs,self.device), action_as_probability_tensor(clipped_actions[0],env.action_space.n).to(self.device), obs_as_tensor(new_obs,self.device))
+            intrinsic_rewards = self.curiosity.reward(obs_as_tensor(self._last_obs,self.device).to(th.float32), action_as_probability_tensor(clipped_actions[0],env.action_space.n).to(self.device).to(th.float32), obs_as_tensor(new_obs,self.device).to(th.float32))
             rewards = (1 - self.intrinsic_reward_integration) * rewards + self.intrinsic_reward_integration * intrinsic_rewards
 
             self.num_timesteps += env.num_envs

@@ -76,7 +76,7 @@ class ICM(nn.Module):
     def __init__(self, state_dim, action_dim, *, channels_next_state: list[int]):
         super(ICM, self).__init__()
         self.predict_next_state = sequential_stack(
-            [action_dim + state_dim] + channels_next_state
+            [action_dim + state_dim] + channels_next_state + [ state_dim]
         )
 
     def forward(self, state: torch.Tensor, action: torch.Tensor):
@@ -120,4 +120,5 @@ class CuriosityAgent(nn.Module):
         return self.embedding(state, action, next_state)
 
     def reward(self, state, action, next_state):
-        return self.curiosity(self.embedding(state), action, self.embedding(next_state))
+        print(self)
+        return self.curiosity.reward(self.embedding(state), action, self.embedding(next_state))
