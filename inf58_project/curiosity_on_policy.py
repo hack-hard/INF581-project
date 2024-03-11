@@ -24,7 +24,8 @@ from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
 from base import CuriosityAgent
 
 SelfICMOnPolicyAlgorithm = TypeVar("SelfICMOnPolicyAlgorithm", bound="ICM_OnPolicyAlgorithm")
-
+def action_as_probability_tensor(action:np.ndarray,nb_actions:int):
+    return th.tensor([i == action for i in range(nb_actions)])
 
 class ICM_OnPolicyAlgorithm(BaseAlgorithm):
     """
@@ -257,7 +258,7 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
             new_obs, rewards, dones, infos = env.step(clipped_actions)
 
             # adding intrinsic reward (curiosity)
-            intrinsic_rewards = self.curiosity.reward(self._last_obs, clipped_actions, new_obs)
+            intrinsic_rewards = self.curiosity.reward(self._last_obs, action_as_probability_tensor(clipped_actions,env.action_space.n), new_obs)
             rewards = (1 - self.intrinsic_reward_integration) * rewards + self.intrinsic_reward_integration * intrinsic_rewards
 
             self.num_timesteps += env.num_envs
