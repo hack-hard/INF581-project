@@ -23,9 +23,14 @@ from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
 
 from inf58_project.base import CuriosityAgent
 
-SelfICMOnPolicyAlgorithm = TypeVar("SelfICMOnPolicyAlgorithm", bound="ICM_OnPolicyAlgorithm")
-def action_as_probability_tensor(action:np.ndarray,nb_actions:int):
-    return th.tensor([i == action for i in range(nb_actions)])
+SelfICMOnPolicyAlgorithm = TypeVar(
+    "SelfICMOnPolicyAlgorithm", bound="ICM_OnPolicyAlgorithm"
+)
+
+
+def action_as_probability_tensor(action: np.ndarray, nb_actions: int):
+    return th.tensor([i == action for i in range(nb_actions)]).unsqueeze(0)
+
 
 class ICM_OnPolicyAlgorithm(BaseAlgorithm):
     """
@@ -125,7 +130,7 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
         self.optimizer_class = optimizer_class
 
         self.curiosity = CuriosityAgent(
-            sum(env.observation_space.shape), 
+            sum(env.observation_space.shape),
             sum(flatten_space(env.action_space).shape),
         )
 
@@ -151,12 +156,25 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
             **self.buffer_kwargs,
         )
         self.policy = self.policy_class(  # type: ignore[assignment]
-            self.observation_space, self.action_space, self.lr_schedule, use_sde=self.use_sde, **self.policy_kwargs
+            self.observation_space,
+            self.action_space,
+            self.lr_schedule,
+            use_sde=self.use_sde,
+            **self.policy_kwargs,
         )
-        self.policy.optimizer = self.optimizer_class(chain(self.policy.parameters(), self.curiosity.parameters(), self.curiosity.embedding.parameters()), self.learning_rate)
+        self.policy.optimizer = self.optimizer_class(
+            chain(
+                self.policy.parameters(),
+                self.curiosity.parameters(),
+                self.curiosity.embedding.parameters(),
+            ),
+            self.learning_rate,
+        )
         self.policy = self.policy.to(self.device)
 
-    def save_replay_buffer(self, path: Union[str, pathlib.Path, io.BufferedIOBase]) -> None:
+    def save_replay_buffer(
+        self, path: Union[str, pathlib.Path, io.BufferedIOBase]
+    ) -> None:
         """
         Save the replay buffer as a pickle file.
 
@@ -181,16 +199,22 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
             If set to ``False``, we assume that we continue the same trajectory (same episode).
         """
         self.replay_buffer = load_from_pkl(path, self.verbose)
-        assert isinstance(self.replay_buffer, ReplayBuffer), "The replay buffer must inherit from ReplayBuffer class"
+        assert isinstance(
+            self.replay_buffer, ReplayBuffer
+        ), "The replay buffer must inherit from ReplayBuffer class"
 
         # Backward compatibility with SB3 < 2.1.0 replay buffer
         # Keep old behavior: do not handle timeout termination separately
-        if not hasattr(self.replay_buffer, "handle_timeout_termination"):  # pragma: no cover
+        if not hasattr(
+            self.replay_buffer, "handle_timeout_termination"
+        ):  # pragma: no cover
             self.replay_buffer.handle_timeout_termination = False
             self.replay_buffer.timeouts = np.zeros_like(self.replay_buffer.dones)
 
         if isinstance(self.replay_buffer, HerReplayBuffer):
-            assert self.env is not None, "You must pass an environment at load time when using `HerReplayBuffer`"
+            assert (
+                self.env is not None
+            ), "You must pass an environment at load time when using `HerReplayBuffer`"
             self.replay_buffer.set_env(self.env)
             if truncate_last_traj:
                 self.replay_buffer.truncate_last_trajectory()
@@ -231,7 +255,11 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
 
         while n_steps < n_steps_total:
             # remove?
-            if self.use_sde and self.sde_sample_freq > 0 and n_steps % self.sde_sample_freq == 0:
+            if (
+                self.use_sde
+                and self.sde_sample_freq > 0
+                and n_steps % self.sde_sample_freq == 0
+            ):
                 # Sample a new noise matrix
                 self.policy.reset_noise(env.num_envs)
 
@@ -253,14 +281,27 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
                 else:
                     # Otherwise, clip the actions to avoid out of bound error
                     # as we are sampling from an unbounded Gaussian distribution
-                    clipped_actions = np.clip(actions, self.action_space.low, self.action_space.high)
+                    clipped_actions = np.clip(
+                        actions, self.action_space.low, self.action_space.high
+                    )
 
             new_obs, rewards, dones, infos = env.step(clipped_actions)
-            print(obs_as_tensor(self._last_obs,self.device),clipped_actions.dtype,self._last_obs.dtype)
 
             # adding intrinsic reward (curiosity)
-            intrinsic_rewards = self.curiosity.reward(obs_as_tensor(self._last_obs,self.device).to(th.float32), action_as_probability_tensor(clipped_actions[0],env.action_space.n).to(self.device).to(th.float32), obs_as_tensor(new_obs,self.device).to(th.float32))
-            rewards = (1 - self.intrinsic_reward_integration) * rewards + self.intrinsic_reward_integration * intrinsic_rewards
+            intrinsic_rewards = (
+                self.curiosity.reward(
+                    obs_as_tensor(self._last_obs, self.device).to(th.float32),
+                    action_as_probability_tensor(clipped_actions[0], env.action_space.n)
+                    .to(self.device)
+                    .to(th.float32),
+                    obs_as_tensor(new_obs, self.device).to(th.float32),
+                )
+                .detach()
+                .numpy()
+            )
+            rewards = (
+                1 - self.intrinsic_reward_integration
+            ) * rewards + self.intrinsic_reward_integration * intrinsic_rewards
 
             self.num_timesteps += env.num_envs
 
@@ -271,7 +312,7 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
 
             self._update_info_buffer(infos)
             n_steps += 1
-            
+
             # remove?
             if isinstance(self.action_space, spaces.Discrete):
                 # Reshape in case of discrete action
@@ -285,7 +326,9 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
                     and infos[idx].get("terminal_observation") is not None
                     and infos[idx].get("TimeLimit.truncated", False)
                 ):
-                    terminal_obs = self.policy.obs_to_tensor(infos[idx]["terminal_observation"])[0]
+                    terminal_obs = self.policy.obs_to_tensor(
+                        infos[idx]["terminal_observation"]
+                    )[0]
                     with th.no_grad():
                         terminal_value = self.policy.predict_values(terminal_obs)[0]  # type: ignore[arg-type]
                     rewards[idx] += self.gamma * terminal_value
@@ -295,9 +338,11 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
                 new_obs,
                 actions,
                 rewards,
-                self._last_episode_starts,  # type: ignore[arg-type]
-                values,
-                log_probs,
+                dones,
+                infos,
+                # self._last_episode_starts,  # type: ignore[arg-type]
+                # values,
+                # log_probs,
             )
             self._last_obs = new_obs  # type: ignore[assignment]
             self._last_episode_starts = dones
@@ -345,7 +390,9 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
         assert self.env is not None
 
         while self.num_timesteps < total_timesteps:
-            continue_training = self.collect_rollouts(self.env, callback, self.buffer, n_steps_total=self.n_steps)
+            continue_training = self.collect_rollouts(
+                self.env, callback, self.buffer, n_steps_total=self.n_steps
+            )
 
             if not continue_training:
                 break
@@ -356,15 +403,29 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
             # Display training infos
             if log_interval is not None and iteration % log_interval == 0:
                 assert self.ep_info_buffer is not None
-                time_elapsed = max((time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon)
-                fps = int((self.num_timesteps - self._num_timesteps_at_start) / time_elapsed)
+                time_elapsed = max(
+                    (time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon
+                )
+                fps = int(
+                    (self.num_timesteps - self._num_timesteps_at_start) / time_elapsed
+                )
                 self.logger.record("time/iterations", iteration, exclude="tensorboard")
                 if len(self.ep_info_buffer) > 0 and len(self.ep_info_buffer[0]) > 0:
-                    self.logger.record("rollout/ep_rew_mean", safe_mean([ep_info["r"] for ep_info in self.ep_info_buffer]))
-                    self.logger.record("rollout/ep_len_mean", safe_mean([ep_info["l"] for ep_info in self.ep_info_buffer]))
+                    self.logger.record(
+                        "rollout/ep_rew_mean",
+                        safe_mean([ep_info["r"] for ep_info in self.ep_info_buffer]),
+                    )
+                    self.logger.record(
+                        "rollout/ep_len_mean",
+                        safe_mean([ep_info["l"] for ep_info in self.ep_info_buffer]),
+                    )
                 self.logger.record("time/fps", fps)
-                self.logger.record("time/time_elapsed", int(time_elapsed), exclude="tensorboard")
-                self.logger.record("time/total_timesteps", self.num_timesteps, exclude="tensorboard")
+                self.logger.record(
+                    "time/time_elapsed", int(time_elapsed), exclude="tensorboard"
+                )
+                self.logger.record(
+                    "time/total_timesteps", self.num_timesteps, exclude="tensorboard"
+                )
                 self.logger.dump(step=self.num_timesteps)
 
             self.train()
