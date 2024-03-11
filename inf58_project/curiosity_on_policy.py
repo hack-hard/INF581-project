@@ -4,6 +4,7 @@ import io
 import pathlib
 from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
 from itertools import chain
+from math import prod
 
 import numpy as np
 import torch as th
@@ -130,8 +131,8 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
         self.optimizer_class = optimizer_class
 
         self.curiosity = CuriosityAgent(
-            sum(env.observation_space.shape),
-            sum(flatten_space(env.action_space).shape),
+            prod(env.observation_space.shape),
+            prod(flatten_space(env.action_space).shape),
         )
 
         if _init_setup_model:

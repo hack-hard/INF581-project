@@ -9,7 +9,7 @@ import torch as th
 from gymnasium import spaces
 from torch.nn import functional as F
 
-from stable_baselines3.common.buffers import RolloutBuffer
+from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.policies import (
     ActorCriticCnnPolicy,
@@ -19,9 +19,9 @@ from stable_baselines3.common.policies import (
 )
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import explained_variance, get_schedule_fn
-from inf58_project.curiosity_on_policy import ICM_OnPolicyAlgorithm
+from curiosity_on_policy import ICM_OnPolicyAlgorithm
 
-from inf58_project.base import CuriosityAgent
+from base import CuriosityAgent
 
 from gymnasium.spaces.utils import flatten_space
 
@@ -104,7 +104,7 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
         sde_sample_freq: int = -1,
         policy_weight: float = 1.5,
         intrinsic_reward_integration: float = 0.2,
-        buffer_class: Optional[Type[RolloutBuffer]] = None,
+        buffer_class: Optional[Type[ReplayBuffer]] = None,
         buffer_kwargs: Optional[Dict[str, Any]] = None,
         target_kl: Optional[float] = None,
         stats_window_size: int = 100,
