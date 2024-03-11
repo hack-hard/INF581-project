@@ -10,7 +10,8 @@ Be creative! do whatever you want!
 import gymnasium
 import numpy
 import time
-import stable_baselines3
+from stable_baselines3.common.env_util import make_atari_env
+from curiosity_ppo import ICM_PPO
 
 
 def main():  # pragma: no cover
@@ -37,6 +38,9 @@ def main():  # pragma: no cover
         mode=0, # values in [0,...,7]
         difficulty=0 # values in [0,1]
     )
+
+    model = ICM_PPO("MlpPolicy", env, verbose=1)
+    model.learn(total_timesteps=25000)
     
     for game in range(1): 
         obs = env.reset()

@@ -9,7 +9,7 @@ import torch as th
 from gymnasium import spaces
 from torch.nn import functional as F
 
-from stable_baselines3.common.buffers import RolloutBuffer
+from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.policies import ActorCriticCnnPolicy, ActorCriticPolicy, BasePolicy, MultiInputActorCriticPolicy
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
@@ -53,8 +53,9 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
     :param sde_sample_freq: Sample a new noise matrix every n steps when using gSDE
         Default: -1 (only sample at the beginning of the rollout)
     :param policy_weight: coeff of importance for the policy loss (as opposed to the curiosity loss)
-    :param rollout_buffer_class: Rollout buffer class to use. If ``None``, it will be automatically selected.
-    :param rollout_buffer_kwargs: Keyword arguments to pass to the rollout buffer on creation
+    :param intrinsic_reward_integration: importance of the intrinsic reward in the total reward
+    :param buffer_class:  buffer class to use. If ``None``, it will be automatically selected.
+    :param buffer_kwargs: Keyword arguments to pass to the buffer on creation
     :param target_kl: Limit the KL divergence between updates,
         because the clipping is not enough to prevent large update
         see issue #213 (cf https://github.com/hill-a/stable-baselines/issues/213)
@@ -95,12 +96,14 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
         max_grad_norm: float = 0.5,
         use_sde: bool = False,
         sde_sample_freq: int = -1,
-        policy_weight: float = 1,
-        rollout_buffer_class: Optional[Type[RolloutBuffer]] = None,
-        rollout_buffer_kwargs: Optional[Dict[str, Any]] = None,
+        policy_weight: float = 1.5,
+        intrinsic_reward_integration: float = 0.2,
+        buffer_class: Optional[Type[ReplayBuffer]] = None,
+        buffer_kwargs: Optional[Dict[str, Any]] = None,
         target_kl: Optional[float] = None,
         stats_window_size: int = 100,
         tensorboard_log: Optional[str] = None,
+        policy_kwargs: Optional[Dict[str, Any]] = None,
         verbose: int = 0,
         seed: Optional[int] = None,
         device: Union[th.device, str] = "auto",
@@ -112,44 +115,78 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
             learning_rate=learning_rate,
             n_steps=n_steps,
             gamma=gamma,
+            optimizer_class=optimizer_class,
             gae_lambda=gae_lambda,
             ent_coef=ent_coef,
             vf_coef=vf_coef,
             max_grad_norm=max_grad_norm,
             use_sde=use_sde,
             sde_sample_freq=sde_sample_freq,
-            rollout_buffer_class=rollout_buffer_class,
-            rollout_buffer_kwargs=rollout_buffer_kwargs,
+            intrinsic_reward_integration=intrinsic_reward_integration,
+            buffer_class=buffer_class,
+            buffer_kwargs=buffer_kwargs,
             stats_window_size=stats_window_size,
             tensorboard_log=tensorboard_log,
+            policy_kwargs=policy_kwargs,
             verbose=verbose,
             device=device,
             seed=seed,
-            _init_setup_model=_init_setup_model,
+            _init_setup_model=False,
             supported_action_spaces=(
-                # spaces.Box,
-                spaces.Discrete,
-                # spaces.MultiDiscrete,
-                # spaces.MultiBinary,
+                #spaces.Box,
+                spaces.Discrete, 
+                #spaces.MultiDiscrete,
+                #spaces.MultiBinary,
             ),
-            clip_range=clip_range,
-            clip_range_vf=clip_range_vf,
-            normalize_advantage=normalize_advantage,
-            target_kl=target_kl,
-            batch_size=batch_size,
-            n_epochs=n_epochs,
         )
-        # add things here
-        self.optimizer = optimizer_class(chain(self.policy.parameters(), self.curiosity.parameters(), self.curiosity.embedding.parameters()), learning_rate)
-        
-        self.curiosity = CuriosityAgent(
-            sum(env.observation_space.shape), 
-            sum(flatten_space(env.action_space).shape),
-        )
+
+        # Sanity check, otherwise it will lead to noisy gradient and NaN
+        # because of the advantage normalization
+        if normalize_advantage:
+            assert (
+                batch_size > 1
+            ), "`batch_size` must be greater than 1. See https://github.com/DLR-RM/stable-baselines3/issues/440"
+
+        if self.env is not None:
+            # Check that `n_steps * n_envs > 1` to avoid NaN
+            # when doing advantage normalization
+            buffer_size = self.env.num_envs * self.n_steps
+            assert buffer_size > 1 or (
+                not normalize_advantage
+            ), f"`n_steps * n_envs` must be greater than 1. Currently n_steps={self.n_steps} and n_envs={self.env.num_envs}"
+            # Check that the rollout buffer size is a multiple of the mini-batch size
+            untruncated_batches = buffer_size // batch_size
+            if buffer_size % batch_size > 0:
+                warnings.warn(
+                    f"You have specified a mini-batch size of {batch_size},"
+                    f" but because the `RolloutBuffer` is of size `n_steps * n_envs = {buffer_size}`,"
+                    f" after every {untruncated_batches} untruncated mini-batches,"
+                    f" there will be a truncated mini-batch of size {buffer_size % batch_size}\n"
+                    f"We recommend using a `batch_size` that is a factor of `n_steps * n_envs`.\n"
+                    f"Info: (n_steps={self.n_steps} and n_envs={self.env.num_envs})"
+                )
+        self.batch_size = batch_size
+        self.n_epochs = n_epochs
+        self.clip_range = clip_range
+        self.clip_range_vf = clip_range_vf
+        self.normalize_advantage = normalize_advantage
+        self.target_kl = target_kl
         self.policy_weight = policy_weight
+
+        if _init_setup_model:
+            self._setup_model()
+        
 
     def _setup_model(self) -> None:
         super()._setup_model()
+
+        # Initialize schedules for policy/value clipping
+        self.clip_range = get_schedule_fn(self.clip_range)
+        if self.clip_range_vf is not None:
+            if isinstance(self.clip_range_vf, (float, int)):
+                assert self.clip_range_vf > 0, "`clip_range_vf` must be positive, " "pass `None` to deactivate vf clipping"
+
+            self.clip_range_vf = get_schedule_fn(self.clip_range_vf)
 
     def train(self) -> None: 
         """
@@ -167,6 +204,7 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
 
         entropy_losses = []
         pg_losses, value_losses = [], []
+        curiosity_losses = []
         clip_fractions = []
 
         continue_training = True
@@ -174,13 +212,14 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
         for epoch in range(self.n_epochs):
             approx_kl_divs = []
             # Do a complete pass on the rollout buffer
-            for rollout_data in self.rollout_buffer.get(self.batch_size):
+            for rollout_data in self.buffer.get(self.batch_size):
                 actions = rollout_data.actions
                 if isinstance(self.action_space, spaces.Discrete):
                     # Convert discrete action from float to long
                     actions = rollout_data.actions.long().flatten()
 
                 # Re-sample the noise matrix because the log_std has changed
+                # remove?
                 if self.use_sde:
                     self.policy.reset_noise(self.batch_size)
 
@@ -227,7 +266,12 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
 
                 entropy_losses.append(entropy_loss.item())
 
-                loss = policy_loss + self.ent_coef * entropy_loss + self.vf_coef * (value_loss + nouveau truc ici!)
+                # Curiosity loss
+                curiosity_loss = self.curiosity.loss(rollout_data.observations, rollout_data.actions, rollout_data.next_observations)
+                curiosity_losses.append(curiosity_loss.item())
+
+                loss = policy_loss + self.ent_coef * entropy_loss + self.vf_coef * value_loss
+                loss = self.policy_weight * loss + curiosity_loss
 
                 # Calculate approximate form of reverse KL Divergence for early stopping
                 # see issue #417: https://github.com/DLR-RM/stable-baselines3/issues/417
@@ -261,6 +305,7 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
         self.logger.record("train/entropy_loss", np.mean(entropy_losses))
         self.logger.record("train/policy_gradient_loss", np.mean(pg_losses))
         self.logger.record("train/value_loss", np.mean(value_losses))
+        self.logger.record("train/curiosity_loss", np.mean(curiosity_losses))
         self.logger.record("train/approx_kl", np.mean(approx_kl_divs))
         self.logger.record("train/clip_fraction", np.mean(clip_fractions))
         self.logger.record("train/loss", loss.item())

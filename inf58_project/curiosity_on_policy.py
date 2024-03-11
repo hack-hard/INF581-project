@@ -40,7 +40,6 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
     :param gamma: Discount factor
     :param gae_lambda: Factor for trade-off of bias vs variance for Generalized Advantage Estimator.
         Equivalent to classic advantage when set to 1.
-    :param policy_weight: coeff of importance for the policy loss (as opposed to the curiosity loss)
     :param intrinsic_reward_integration: importance of the intrinsic reward in the total reward
     :param optimizer_class: class to use as optimizer class
     :param ent_coef: Entropy coefficient for the loss calculation
@@ -78,7 +77,6 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
         n_steps: int,
         gamma: float,
         gae_lambda: float,
-        policy_weight: float,
         intrinsic_reward_integration: float,
         optimizer_class,
         ent_coef: float,
@@ -117,7 +115,6 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
         self.n_steps = n_steps
         self.gamma = gamma
         self.gae_lambda = gae_lambda
-        self.policy_weight = policy_weight
         self.intrinsic_reward_integration = intrinsic_reward_integration
         self.ent_coef = ent_coef
         self.vf_coef = vf_coef
@@ -149,8 +146,6 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
             self.observation_space,  # type: ignore[arg-type]
             self.action_space,
             device=self.device,
-            gamma=self.gamma,
-            gae_lambda=self.gae_lambda,
             n_envs=self.n_envs,
             **self.buffer_kwargs,
         )
@@ -201,33 +196,6 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
 
         # Update saved replay buffer device to match current setting, see GH#1561
         self.replay_buffer.device = self.device
-
-    def collect_rollouts(
-        self,
-        env: VecEnv,
-        callback: BaseCallback,
-        train_freq: TrainFreq,
-        replay_buffer: ReplayBuffer,
-        learning_starts: int = 0,
-        log_interval: Optional[int] = None,
-    ) -> RolloutReturn:
-        """
-        Collect experiences and store them into a ``ReplayBuffer``.
-
-        :param env: The training environment
-        :param callback: Callback that will be called at each step
-            (and at the beginning and end of the rollout)
-        :param train_freq: How much experience to collect
-            by doing rollouts of current policy.
-            Either ``TrainFreq(<n>, TrainFrequencyUnit.STEP)``
-            or ``TrainFreq(<n>, TrainFrequencyUnit.EPISODE)``
-            with ``<n>`` being an integer greater than 0.
-        :param learning_starts: Number of steps before learning for the warm-up phase.
-        :param replay_buffer:
-        :param log_interval: Log data every ``log_interval`` episodes
-        :return:
-        """
-        pass
 
     def collect_rollouts(
         self,
@@ -289,8 +257,8 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
             new_obs, rewards, dones, infos = env.step(clipped_actions)
 
             # adding intrinsic reward (curiosity)
-            intrinsic_reward = 
-            rewards = (1 - self.intrinsic_reward_integration) * rewards + self.intrinsic_reward_integration * intrinsic_reward
+            intrinsic_rewards = self.curiosity.reward(self._last_obs, clipped_actions, new_obs)
+            rewards = (1 - self.intrinsic_reward_integration) * rewards + self.intrinsic_reward_integration * intrinsic_rewards
 
             self.num_timesteps += env.num_envs
 
@@ -375,7 +343,7 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
         assert self.env is not None
 
         while self.num_timesteps < total_timesteps:
-            continue_training = self.collect_rollouts(self.env, callback, self.buffer, n_rollout_steps=self.n_steps)
+            continue_training = self.collect_rollouts(self.env, callback, self.buffer, n_steps_total=self.n_steps)
 
             if not continue_training:
                 break

@@ -55,7 +55,7 @@ class EncodeAction(nn.Module):
             [state_dim] + channels_embedding + [embedding_dim]
         )
         self.predict_action = policy_stack(
-            [2 * self.embedding_dim] + channels_action + [action_dim]
+            [2 * embedding_dim] + channels_action + [action_dim]
         )
 
     def forward(self, state):
@@ -94,7 +94,7 @@ class CuriosityAgent(nn.Module):
         state_dim,
         action_dim,
         *,
-        encoding_dim,
+        encoding_dim=20,
         q_channels=[],
         encoding_channels=[],
         curiosity_channels=[],
