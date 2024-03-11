@@ -33,6 +33,10 @@ def sequential_stack(channels: list[int]) -> nn.Sequential:
     )
     return nn.Sequential(*modules)
 
+@dataclass
+class A2C:
+    pi_actor:nn.Module
+    advantage_critic:nn.Module
 
 @dataclass
 class A2C:
