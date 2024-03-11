@@ -12,7 +12,7 @@ from gymnasium import spaces
 from gymnasium.spaces.utils import flatten_space
 
 from stable_baselines3.common.base_class import BaseAlgorithm
-from stable_baselines3.common.buffers import ReplayBuffer, DictReplayBuffer
+from stable_baselines3.common.buffers import RolloutBuffer, DictReplayBuffer
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.policies import ActorCriticPolicy
 from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl
@@ -55,7 +55,7 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
         instead of action noise exploration (default: False)
     :param sde_sample_freq: Sample a new noise matrix every n steps when using gSDE
         Default: -1 (only sample at the beginning of the rollout)
-    :param buffer_class: Buffer class to use. If ``None``, it will be automatically selected as "ReplayBuffer".
+    :param buffer_class: Buffer class to use. If ``None``, it will be automatically selected as "RolloutBuffer".
     :param buffer_kwargs: Keyword arguments to pass to the buffer on creation.
     :param stats_window_size: Window size for the rollout logging, specifying the number of episodes to average
         the reported success rate, mean episode length, and mean reward over
@@ -72,7 +72,7 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
     :param supported_action_spaces: The action spaces supported by the algorithm.
     """
 
-    buffer: ReplayBuffer
+    buffer: RolloutBuffer
     policy: ActorCriticPolicy
 
     def __init__(
@@ -90,7 +90,7 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
         max_grad_norm: float,
         use_sde: bool,
         sde_sample_freq: int,
-        buffer_class: Optional[Type[ReplayBuffer]] = None,
+        buffer_class: Optional[Type[RolloutBuffer]] = None,
         buffer_kwargs: Optional[Dict[str, Any]] = None,
         stats_window_size: int = 100,
         tensorboard_log: Optional[str] = None,
@@ -143,9 +143,9 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
 
         if self.buffer_class is None:
             if isinstance(self.observation_space, spaces.Dict):
-                self.buffer_class = DictReplayBuffer
+                self.buffer_class = DictRolloutBuffer
             else:
-                self.buffer_class = ReplayBuffer
+                self.buffer_class = RolloutBuffer
 
         self.buffer = self.buffer_class(
             self.n_steps,
@@ -200,8 +200,8 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
         """
         self.replay_buffer = load_from_pkl(path, self.verbose)
         assert isinstance(
-            self.replay_buffer, ReplayBuffer
-        ), "The replay buffer must inherit from ReplayBuffer class"
+            self.replay_buffer, RolloutBuffer
+        ), "The replay buffer must inherit from RolloutBuffer class"
 
         # Backward compatibility with SB3 < 2.1.0 replay buffer
         # Keep old behavior: do not handle timeout termination separately
@@ -226,11 +226,11 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
         self,
         env: VecEnv,
         callback: BaseCallback,
-        buffer: ReplayBuffer,
+        buffer: RolloutBuffer,
         n_steps_total: int,
     ) -> bool:
         """
-        Collect experiences using the current policy and fill a ReplayBuffer.
+        Collect experiences using the current policy and fill a RolloutBuffer.
 
         :param env: The training environment
         :param callback: Callback that will be called at each step
@@ -294,7 +294,7 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
                     action_as_probability_tensor(clipped_actions[0], env.action_space.n)
                     .to(self.device)
                     .to(th.float32),
-                    obs_as_tensor(new_obs, self.device).to(th.float32)/256,
+                    obs_as_tensor(new_obs, self.device).to(th.float32),
                 )
                 .detach()
                 .numpy()
@@ -335,14 +335,14 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
 
             buffer.add(
                 self._last_obs,  # type: ignore[arg-type]
-                new_obs,
+                # new_obs,
                 actions,
                 rewards,
-                dones,
-                infos,
-                # self._last_episode_starts,  # type: ignore[arg-type]
-                # values,
-                # log_probs,
+                # dones,
+                # infos,
+                self._last_episode_starts,  # type: ignore[arg-type]
+                values,
+                log_probs,
             )
             self._last_obs = new_obs  # type: ignore[assignment]
             self._last_episode_starts = dones
@@ -351,6 +351,7 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
             # Compute value for the last timestep
             values = self.policy.predict_values(obs_as_tensor(new_obs, self.device))  # type: ignore[arg-type]
 
+        # method does not exist
         buffer.compute_returns_and_advantage(last_values=values, dones=dones)
 
         callback.update_locals(locals())

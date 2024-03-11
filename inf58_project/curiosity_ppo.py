@@ -9,7 +9,7 @@ import torch as th
 from gymnasium import spaces
 from torch.nn import functional as F
 
-from stable_baselines3.common.buffers import ReplayBuffer
+from stable_baselines3.common.buffers import RolloutBuffer
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.policies import ActorCriticCnnPolicy, ActorCriticPolicy, BasePolicy, MultiInputActorCriticPolicy
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
@@ -98,7 +98,7 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
         sde_sample_freq: int = -1,
         policy_weight: float = 1.5,
         intrinsic_reward_integration: float = 0.2,
-        buffer_class: Optional[Type[ReplayBuffer]] = None,
+        buffer_class: Optional[Type[RolloutBuffer]] = None,
         buffer_kwargs: Optional[Dict[str, Any]] = None,
         target_kl: Optional[float] = None,
         stats_window_size: int = 100,

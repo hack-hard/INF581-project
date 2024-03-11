@@ -34,7 +34,7 @@ def main():  # pragma: no cover
     env = gymnasium.make(
         id="ALE/Pacman-v5",
         full_action_space=False,  # action space is Discrete(5) for NOOP, UP, RIGHT, LEFT, DOWN
-        render_mode="human",
+        # render_mode="human",
         obs_type="ram",  # observation_space=Box(0, 255, (128,), np.uint8)
         mode=0,  # values in [0,...,7]
         difficulty=0,  # values in [0,1]
@@ -42,6 +42,7 @@ def main():  # pragma: no cover
 
     model = ICM_PPO("MlpPolicy", env, verbose=1)
     model.learn(total_timesteps=25000)
+    input("game?")
 
     for game in range(1):
         obs = env.reset()
