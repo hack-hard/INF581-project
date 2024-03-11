@@ -19,9 +19,9 @@ from stable_baselines3.common.policies import (
 )
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import explained_variance, get_schedule_fn
-from curiosity_on_policy import ICM_OnPolicyAlgorithm
-
-from base import CuriosityAgent
+from inf58_project.curiosity_on_policy import ICM_OnPolicyAlgorithm
+from inf58_project.utils import *
+from inf58_project.base import CuriosityAgent
 
 from gymnasium.spaces.utils import flatten_space
 

@@ -9,10 +9,11 @@ Be creative! do whatever you want!
 """
 
 import gymnasium
-import numpy
 import time
+import torch
 from stable_baselines3.common.env_util import make_atari_env
-from inf58_project.curiosity_ppo import ICM_PPO
+from inf58_project.curiosity_A2C import train_actor_critic_curiosity
+import matplotlib.pyplot as plt
 
 
 def main():  # pragma: no cover
@@ -40,9 +41,10 @@ def main():  # pragma: no cover
         difficulty=0,  # values in [0,1]
     )
 
-    model = ICM_PPO("MlpPolicy", env, verbose=1)
-    model.learn(total_timesteps=25000)
-    input("game?")
+    device = torch.device("cpu")
+    model, data = train_actor_critic_curiosity(env, device, 100, 3, 50, 0.95)
+    plt.plot(data)
+    actor = model.actor_critic.pi_actor
 
     for game in range(1):
         obs = env.reset()
@@ -50,7 +52,17 @@ def main():  # pragma: no cover
         while not done:
             env.render()
             obs, reward, terminated, truncated, info = env.step(
-                env.action_space.sample()
+                torch.argmax(
+                    actor(
+                        torch.tensor(obs, dtype=torch.float32, device=device).unsqueeze(
+                            0
+                        )
+                        / 256
+                    )
+                )
+                .detach()
+                .numpy()
+                .squeeze(0)
             )
             done = terminated or truncated
             time.sleep(0)
