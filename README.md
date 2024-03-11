@@ -2,7 +2,7 @@
 ## Installing the environnement
 At the root of the project
 ```bash
-conda install -r env.yaml
+conda env install -f env.yml
 pip install -e .
 ```
 
