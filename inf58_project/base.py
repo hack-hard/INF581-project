@@ -45,7 +45,6 @@ def policy_stack(channels: list[int]):
     Return a requential stack representing a policy actor over a discrete action space.
     Output represents the probabilities of taking a given action.
     """
-    print("policy ", channels)
     return sequential_stack(channels) + nn.Sequential(nn.Softmax(-1))
 
 
@@ -68,7 +67,7 @@ class EncodeAction(nn.Module):
         self.embedding = sequential_stack(
             [state_dim] + channels_embedding + [embedding_dim]
         )
-        self.predict_action = policy_stack(
+        self.predict_action_stack = policy_stack(
             [2 * embedding_dim] + channels_action + [action_dim]
         )
 
@@ -76,10 +75,10 @@ class EncodeAction(nn.Module):
         return self.embedding(state)
 
     def predict_action(self, state: torch.Tensor, next_state: torch.Tensor):
-        return torch.cat((self(state), self(next_state)), dim=-1)
+        return self.predict_action_stack(torch.cat((self(state), self(next_state)), dim=-1))
 
     def loss(
-        self, state: torch.Tensor, next_state: torch.Tensor, action_proba: torch.Tensor
+        self, state: torch.Tensor,  action_proba: torch.Tensor,next_state: torch.Tensor,
     ):
         return cross_entropy(action_proba, self.predict_action(state, next_state))
 
@@ -135,7 +134,7 @@ class CuriosityAgent(nn.Module):
     def loss(self, state, action, next_state):
         return self.embedding.loss(
             state, action, next_state
-        ) + self.l * self.curiosity.loss(state, action, next_state)
+        ) + self.l * self.curiosity.loss(self.embedding(state), action, self.embedding(next_state))
 
     def forward(self, state, action, next_state):
         return self.curiosity.reward(
