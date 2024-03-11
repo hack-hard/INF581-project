@@ -32,9 +32,7 @@ def sample_discrete_action(
     """
     state_tensor = torch.tensor(state, dtype=torch.float32) / 256
     action_probabilities = policy_nn(state_tensor)
-    print(action_probabilities)
     sampled_action = torch.multinomial(action_probabilities, 1).item()
-    print(sampled_action)
     sampled_action_log_probability = torch.log(
         action_probabilities[sampled_action]
     ).item()
@@ -74,9 +72,6 @@ def sample_one_episode(
     episode_states.append(state_t)
 
     for t in range(max_episode_duration):
-        if render:
-            env.render_wrapper.render()
-
         action, action_log_prob = sample_discrete_action(policy_nn, state_t)
         next_state, reward, terminated, truncated, info = env.step(action)
 

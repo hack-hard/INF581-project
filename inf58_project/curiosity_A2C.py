@@ -66,7 +66,6 @@ def train_actor_critic_curiosity(
     episode_avg_return_list = []
 
     agent = CuriosityA2C(env, device=device)
-    print(agent)
 
     optimizer = torch.optim.Adam(
         chain(
@@ -90,7 +89,7 @@ def train_actor_critic_curiosity(
         values = [0] * (ep_len - 1)
         gain = postporcess_tensor(
             agent.actor_critic.v_critic(
-                preprocess_tensor(episode_states[ep_len - 1], device)
+                preprocess_tensor(episode_states[ep_len - 1], device)/255
             )
         )
         for t in range(ep_len - 2, -1, -1):
@@ -98,9 +97,9 @@ def train_actor_critic_curiosity(
                 (1 - intrinsic_reward_integration) * episode_rewards[t]
                 + intrinsic_reward_integration
                 * agent.curiosity.reward(
-                    preprocess_tensor(episode_states[t], device),
-                    preprocess_tensor(action_to_proba(episode_actions[t],5), device),
-                    preprocess_tensor(episode_states[t + 1], device),
+                    preprocess_tensor(episode_states[t], device)/255,
+                    preprocess_tensor(action_to_proba(episode_actions[t],5), device)/255,
+                    preprocess_tensor(episode_states[t + 1], device)/255,
                 )
                 + gain * gamma
             )
