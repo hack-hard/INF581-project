@@ -19,11 +19,6 @@ and then choose `flask` as template.
 """
 
 
-@dataclass
-class A2C:
-    pi_actor: nn.Module
-    advantage_critic: nn.Module
-
 
 def cross_entropy(true_val, pred_val):
     return -torch.sum(true_val * torch.log(pred_val), dim=-1)
@@ -42,14 +37,14 @@ def sequential_stack(channels: list[int]) -> nn.Sequential:
 @dataclass
 class A2C:
     pi_actor:nn.Module
-    advantage_critic:nn.Module
+    v_critic:nn.Module
 
 def policy_stack(channels: list[int]):
     """
     Return a requential stack representing a policy actor over a discrete action space.
     Output represents the probabilities of taking a given action.
     """
-    return sequential_stack(channels) + nn.Sequential(nn.Softmax(channels[-1]))
+    return sequential_stack(channels[:-1]) + nn.Sequential(nn.Softmax(channels[-1]))
 
 
 class EncodeAction(nn.Module):
