@@ -21,7 +21,7 @@ from stable_baselines3.common.utils import obs_as_tensor, safe_mean
 from stable_baselines3.common.vec_env import VecEnv
 from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
 
-from base import CuriosityAgent
+from inf58_project.base import CuriosityAgent
 
 SelfICMOnPolicyAlgorithm = TypeVar("SelfICMOnPolicyAlgorithm", bound="ICM_OnPolicyAlgorithm")
 def action_as_probability_tensor(action:np.ndarray,nb_actions:int):
@@ -256,9 +256,10 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
                     clipped_actions = np.clip(actions, self.action_space.low, self.action_space.high)
 
             new_obs, rewards, dones, infos = env.step(clipped_actions)
+            print(new_obs,clipped_actions,self._last_obs)
 
             # adding intrinsic reward (curiosity)
-            intrinsic_rewards = self.curiosity.reward(self._last_obs, action_as_probability_tensor(clipped_actions,env.action_space.n), new_obs)
+            intrinsic_rewards = self.curiosity.reward(obs_as_tensor(self._last_obs,self.device), action_as_probability_tensor(clipped_actions[0],env.action_space.n).to(self.device), obs_as_tensor(new_obs,self.device))
             rewards = (1 - self.intrinsic_reward_integration) * rewards + self.intrinsic_reward_integration * intrinsic_rewards
 
             self.num_timesteps += env.num_envs

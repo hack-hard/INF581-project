@@ -39,7 +39,7 @@ setup(
     long_description_content_type="text/markdown",
     author="hack-hard",
     packages=find_packages(exclude=["tests", ".github"]),
-    install_requires=read_requirements("requirements.txt"),
+    install_requires=[],
     entry_points={"console_scripts": ["inf58_project = inf58_project.__main__:main"]},
     extras_require={"test": read_requirements("requirements-test.txt")},
 )

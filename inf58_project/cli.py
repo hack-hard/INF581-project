@@ -11,7 +11,7 @@ import gymnasium
 import numpy
 import time
 from stable_baselines3.common.env_util import make_atari_env
-from curiosity_ppo import ICM_PPO
+from inf58_project.curiosity_ppo import ICM_PPO
 
 
 def main():  # pragma: no cover
