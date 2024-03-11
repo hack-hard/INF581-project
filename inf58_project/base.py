@@ -19,6 +19,12 @@ and then choose `flask` as template.
 """
 
 
+@dataclass
+class A2C:
+    pi_actor: nn.Module
+    advantage_critic: nn.Module
+
+
 def cross_entropy(true_val, pred_val):
     return -torch.sum(true_val * torch.log(pred_val), dim=-1)
 
@@ -59,7 +65,7 @@ class EncodeAction(nn.Module):
         action_dim: int,
         *,
         channels_embedding: list[int] = [],
-        channels_action: list[int] = []
+        channels_action: list[int] = [],
     ):
         super(EncodeAction, self).__init__()
         self.embedding = sequential_stack(
@@ -100,41 +106,41 @@ class ICM(nn.Module):
     ):
         return torch.norm(next_state - self(state, action))
 
+    def loss(self, state: torch.Tensor, action: torch.Tensor, next_state: torch.Tensor):
+        return self.reward(state, action, next_state)
+
 
 class CuriosityAgent(nn.Module):
     def __init__(
         self,
         state_dim,
         action_dim,
-        *,
         encoding_dim=20,
-        q_channels=[],
-        encoding_channels=[],
-        curiosity_channels=[],
-        critic_channels=[]
+        *,
+        l: int = 1,
+        channels_embedding: list[int] = [],
+        channels_action: list[int] = [],
+        channels_next_state: list[int] = [],
     ):
         super(CuriosityAgent, self).__init__()
-        self.pi_agent = policy_stack([state_dim] + q_channels + [action_dim])
-        self.adventage_critic = sequential_stack(
-            [state_dim] + critic_channels + [action_dim]
-        )
         self.embedding = EncodeAction(
-            state_dim, encoding_dim, action_dim, channels_embedding=encoding_channels
+            state_dim,
+            encoding_dim,
+            action_dim,
+            channels_embedding=channels_embedding,
+            channels_action=channels_action,
         )
         self.curiosity = ICM(
-            encoding_dim, action_dim, channels_next_state=curiosity_channels
+            encoding_dim, action_dim, channels_next_state=channels_next_state
         )
-
-    def forward(self, state):
-        return self.pi_agent(state)
-
-    def critic(self, state):
-        return self.adventage_critic(state)
+        self.l = l
 
     def loss(self, state, action, next_state):
-        return self.embedding(state, action, next_state)
+        return self.embedding.loss(
+            state, action, next_state
+        ) + self.l * self.curiosity.loss(state, action, next_state)
 
-    def reward(self, state, action, next_state):
+    def forward(self, state, action, next_state):
         return self.curiosity.reward(
             self.embedding(state), action, self.embedding(next_state)
         )

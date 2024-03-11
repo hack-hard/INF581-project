@@ -11,7 +11,12 @@ from torch.nn import functional as F
 
 from stable_baselines3.common.buffers import RolloutBuffer
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
-from stable_baselines3.common.policies import ActorCriticCnnPolicy, ActorCriticPolicy, BasePolicy, MultiInputActorCriticPolicy
+from stable_baselines3.common.policies import (
+    ActorCriticCnnPolicy,
+    ActorCriticPolicy,
+    BasePolicy,
+    MultiInputActorCriticPolicy,
+)
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import explained_variance, get_schedule_fn
 from inf58_project.curiosity_on_policy import ICM_OnPolicyAlgorithm
@@ -19,6 +24,7 @@ from inf58_project.curiosity_on_policy import ICM_OnPolicyAlgorithm
 from inf58_project.base import CuriosityAgent
 
 from gymnasium.spaces.utils import flatten_space
+
 
 class ICM_PPO(ICM_OnPolicyAlgorithm):
     """
@@ -133,10 +139,10 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
             seed=seed,
             _init_setup_model=False,
             supported_action_spaces=(
-                #spaces.Box,
-                spaces.Discrete, 
-                #spaces.MultiDiscrete,
-                #spaces.MultiBinary,
+                # spaces.Box,
+                spaces.Discrete,
+                # spaces.MultiDiscrete,
+                # spaces.MultiBinary,
             ),
         )
 
@@ -175,7 +181,6 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
 
         if _init_setup_model:
             self._setup_model()
-        
 
     def _setup_model(self) -> None:
         super()._setup_model()
@@ -184,11 +189,14 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
         self.clip_range = get_schedule_fn(self.clip_range)
         if self.clip_range_vf is not None:
             if isinstance(self.clip_range_vf, (float, int)):
-                assert self.clip_range_vf > 0, "`clip_range_vf` must be positive, " "pass `None` to deactivate vf clipping"
+                assert self.clip_range_vf > 0, (
+                    "`clip_range_vf` must be positive, "
+                    "pass `None` to deactivate vf clipping"
+                )
 
             self.clip_range_vf = get_schedule_fn(self.clip_range_vf)
 
-    def train(self) -> None: 
+    def train(self) -> None:
         """
         Update policy using the currently gathered rollout buffer.
         """
@@ -223,20 +231,26 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
                 if self.use_sde:
                     self.policy.reset_noise(self.batch_size)
 
-                values, log_prob, entropy = self.policy.evaluate_actions(rollout_data.observations, actions)
+                values, log_prob, entropy = self.policy.evaluate_actions(
+                    rollout_data.observations, actions
+                )
                 values = values.flatten()
                 # Normalize advantage
                 advantages = rollout_data.advantages
                 # Normalization does not make sense if mini batchsize == 1, see GH issue #325
                 if self.normalize_advantage and len(advantages) > 1:
-                    advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+                    advantages = (advantages - advantages.mean()) / (
+                        advantages.std() + 1e-8
+                    )
 
                 # ratio between old and new policy, should be one at the first iteration
                 ratio = th.exp(log_prob - rollout_data.old_log_prob)
 
                 # clipped surrogate loss
                 policy_loss_1 = advantages * ratio
-                policy_loss_2 = advantages * th.clamp(ratio, 1 - clip_range, 1 + clip_range)
+                policy_loss_2 = advantages * th.clamp(
+                    ratio, 1 - clip_range, 1 + clip_range
+                )
                 policy_loss = -th.min(policy_loss_1, policy_loss_2).mean()
 
                 # Logging
@@ -267,10 +281,18 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
                 entropy_losses.append(entropy_loss.item())
 
                 # Curiosity loss
-                curiosity_loss = self.curiosity.loss(rollout_data.observations, rollout_data.actions, rollout_data.next_observations)
+                curiosity_loss = self.curiosity.loss(
+                    rollout_data.observations,
+                    rollout_data.actions,
+                    rollout_data.next_observations,
+                )
                 curiosity_losses.append(curiosity_loss.item())
 
-                loss = policy_loss + self.ent_coef * entropy_loss + self.vf_coef * value_loss
+                loss = (
+                    policy_loss
+                    + self.ent_coef * entropy_loss
+                    + self.vf_coef * value_loss
+                )
                 loss = self.policy_weight * loss + curiosity_loss
 
                 # Calculate approximate form of reverse KL Divergence for early stopping
@@ -279,27 +301,35 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
                 # and Schulman blog: http://joschu.net/blog/kl-approx.html
                 with th.no_grad():
                     log_ratio = log_prob - rollout_data.old_log_prob
-                    approx_kl_div = th.mean((th.exp(log_ratio) - 1) - log_ratio).cpu().numpy()
+                    approx_kl_div = (
+                        th.mean((th.exp(log_ratio) - 1) - log_ratio).cpu().numpy()
+                    )
                     approx_kl_divs.append(approx_kl_div)
 
                 if self.target_kl is not None and approx_kl_div > 1.5 * self.target_kl:
                     continue_training = False
                     if self.verbose >= 1:
-                        print(f"Early stopping at step {epoch} due to reaching max kl: {approx_kl_div:.2f}")
+                        print(
+                            f"Early stopping at step {epoch} due to reaching max kl: {approx_kl_div:.2f}"
+                        )
                     break
 
                 # Optimization step
                 self.policy.optimizer.zero_grad()
                 loss.backward()
                 # Clip grad norm
-                th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
+                th.nn.utils.clip_grad_norm_(
+                    self.policy.parameters(), self.max_grad_norm
+                )
                 self.policy.optimizer.step()
 
             self._n_updates += 1
             if not continue_training:
                 break
 
-        explained_var = explained_variance(self.rollout_buffer.values.flatten(), self.rollout_buffer.returns.flatten())
+        explained_var = explained_variance(
+            self.rollout_buffer.values.flatten(), self.rollout_buffer.returns.flatten()
+        )
 
         # Logs
         self.logger.record("train/entropy_loss", np.mean(entropy_losses))
