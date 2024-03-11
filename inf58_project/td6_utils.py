@@ -8,8 +8,9 @@ from typing import Tuple, List
 from numpy.typing import NDArray
 
 
-def sample_discrete_action(policy_nn: nn.Module,
-                           state: NDArray[np.float64]) -> Tuple[int, torch.Tensor]:
+def sample_discrete_action(
+    policy_nn: nn.Module, state: NDArray[np.float64]
+) -> Tuple[int, float]:
     """
     Sample a discrete action based on the given state and policy network.
 
@@ -29,19 +30,22 @@ def sample_discrete_action(policy_nn: nn.Module,
         The sampled action and its log probability.
 
     """
-    state_tensor = torch.tensor(state, dtype=torch.float32)
+    state_tensor = torch.tensor(state, dtype=torch.float32) / 256
     action_probabilities = policy_nn(state_tensor)
-    # print(action_probabilities)
+    print(action_probabilities)
     sampled_action = torch.multinomial(action_probabilities, 1).item()
-    sampled_action_log_probability = torch.log(action_probabilities[sampled_action]).item()
+    print(sampled_action)
+    sampled_action_log_probability = torch.log(
+        action_probabilities[sampled_action]
+    ).item()
 
     # Return the sampled action and its log probability.
     return sampled_action, sampled_action_log_probability
 
-def sample_one_episode(env: gym.Env,
-                       policy_nn: nn.Module,
-                       max_episode_duration: int,
-                       render: bool = False) -> Tuple[List[NDArray[np.float64]], List[int], List[float], List[torch.Tensor]]:
+
+def sample_one_episode(
+    env: gym.Env, policy_nn: nn.Module, max_episode_duration: int, render: bool = False
+) -> Tuple[List[NDArray[np.float64]], List[int], List[float], List[torch.Tensor]]:
     """
     Execute one episode within the `env` environment utilizing the policy defined by the `policy_nn` parameter.
 
@@ -91,11 +95,14 @@ def sample_one_episode(env: gym.Env,
 
     return episode_states, episode_actions, episode_rewards, episode_log_prob_actions
 
-def avg_return_on_multiple_episodes(env: gym.Env,
-                                    policy_nn: nn.Module,
-                                    num_test_episode: int,
-                                    max_episode_duration: int,
-                                    render: bool = False) -> float:
+
+def avg_return_on_multiple_episodes(
+    env: gym.Env,
+    policy_nn: nn.Module,
+    num_test_episode: int,
+    max_episode_duration: int,
+    render: bool = False,
+) -> float:
     """
     Play multiple episodes of the environment and calculate the average return.
 
@@ -119,6 +126,8 @@ def avg_return_on_multiple_episodes(env: gym.Env,
     """
     cum_sum = 0
     for i in range(num_test_episode):
-        _, _, episode_rewards, _ = sample_one_episode(env, policy_nn, max_episode_duration)
+        _, _, episode_rewards, _ = sample_one_episode(
+            env, policy_nn, max_episode_duration
+        )
         cum_sum += np.sum(episode_rewards)
     return cum_sum / num_test_episode
