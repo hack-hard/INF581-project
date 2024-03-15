@@ -45,7 +45,7 @@ def main():  # pragma: no cover
 
     print("stating training")
     device = torch.device("cpu")
-    model, data = train_actor_critic_curiosity(env, device, 100, 3, 50, 0.95)
+    model, data = train_actor_critic_curiosity(env, device, 100, 3, 100, 0.95,intrinsic_reward_integration=.1)
     plt.plot(data)
     plt.savefig("res.png")
     actor = model.actor_critic.pi_actor
