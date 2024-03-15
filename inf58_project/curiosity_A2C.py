@@ -78,47 +78,51 @@ def train_actor_critic_curiosity(
 
     for episode_index in range(num_train_episodes):
 
-        episode_states, episode_actions, episode_rewards, episode_log_prob_actions = (
+        episode_states, episode_actions, episode_rewards, _ = (
             sample_one_episode(
                 env, agent.actor_critic.pi_actor, max_episode_duration, render=False
             )
         )
 
         ep_len = len(episode_rewards)
-        expected_returns = [0] * (ep_len - 1)
-        values = [0] * (ep_len - 1)
-        gain = postporcess_tensor(
-            agent.actor_critic.v_critic(
+        expected_returns = [torch.scalar_tensor(0.)] * (ep_len - 1)
+        values = [torch.scalar_tensor(0.)] * (ep_len - 1)
+        actions_probas = [torch.scalar_tensor(0.)] * (ep_len - 1)
+        gain =  agent.actor_critic.v_critic(
                 preprocess_tensor(episode_states[ep_len - 1], device)/255
             )
-        )
+        
         for t in range(ep_len - 2, -1, -1):
             gain = (
                 (1 - intrinsic_reward_integration) * episode_rewards[t]
                 + intrinsic_reward_integration
-                * agent.curiosity.reward(
+                * postporcess_tensor(agent.curiosity.reward(
                     preprocess_tensor(episode_states[t], device)/255,
                     preprocess_tensor(action_to_proba(episode_actions[t],5), device)/255,
                     preprocess_tensor(episode_states[t + 1], device)/255,
-                )
+                ))
                 + gain * gamma
             )
             expected_returns[t] = gain
             value = agent.actor_critic.v_critic(preprocess_tensor(episode_states[t],device))
             # value = value.detach().numpy()[0,0]
             values[t] = value
+            actions_probas[t] = agent.actor_critic.pi_actor(preprocess_tensor(episode_states[t],device))
 
         for t in range(ep_len - 1):
             advantage = expected_returns[t] - values[t]
-            actor_loss = -episode_log_prob_actions[t] * advantage
+            print(advantage)
+            actor_loss = -torch.log(actions_probas[t])[0,episode_actions[t]] * advantage
+            print(actor_loss)
             critic_loss = 0.5 * advantage * advantage
             loss = policy_weight * (actor_loss + critic_loss) + agent.curiosity.loss(
                 preprocess_tensor(episode_states[t], device) / 256,
                 preprocess_tensor(action_to_proba(episode_actions[t], 5), device),
                 preprocess_tensor(episode_states[t + 1], device) / 256,
-            )
+            ).unsqueeze(0)
+            print(f"loss {loss}")
+
             optimizer.zero_grad()
-            loss = torch.tensor(loss, device=device, requires_grad=True)
             loss.backward()
             optimizer.step()
 
