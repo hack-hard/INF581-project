@@ -1,4 +1,5 @@
 from math import prod
+from os import stat
 import gymnasium
 from typing import List, Tuple
 from gymnasium.spaces import flatten_space
@@ -6,20 +7,64 @@ from inf58_project.utils import preprocess_tensor, postporcess_tensor, action_to
 from inf58_project.base import *
 from inf58_project.td6_utils import *
 
+class ReplayBuffer:
+  """
+  A simple replay buffer for storing and sampling experiences, 
+  assuming experiences are independent.
+  """
+
+  def __init__(self, max_size):
+    """
+    Initializes the replay buffer.
+
+    Args:
+      max_size: The maximum number of experiences to store in the buffer.
+    """
+    self._buffer = []
+    self._max_size = max_size
+    self._idx = 0
+
+  def add(self, *experience):
+    """
+    Adds an experience to the replay buffer.
+
+    Args:
+      experience: A tuple containing the experience (state, action, reward, new_state, done).
+    """
+    if len(self._buffer) == self._max_size:
+      # Replace the oldest experience if the buffer is full
+      self._buffer[self._idx] = experience
+    else:
+      self._buffer.append(experience)
+    self._idx = (self._idx + 1) % self._max_size
+
+  def sample(self ):
+    """
+    Samples a random set of experiences from the replay buffer.
+
+    Args:
+      sample_size: The number of experiences to sample.
+
+    Returns:
+      A tuple of lists containing the sampled experiences (states, actions, rewards, new_states, dones).
+    """
+    # Randomly sample indices for the batch
+    indice = np.random.randint(len(self._buffer))
+    return self._buffer[indice]
 
 @dataclass
 class CuriosityA2C:
     actor_critic: A2C
     curiosity: CuriosityAgent
 
-    def __init__(self, env, pi_layers=[], v_layers=[], device=None):
+    def __init__(self, env, pi_layers=[], v_layers=[], device=None, **kargs):
         state_dim = prod(env.observation_space.shape)
         action_dim = prod(flatten_space(env.action_space).shape)
         self.actor_critic = A2C(
             policy_stack([state_dim] + pi_layers + [action_dim]).to(device),
             sequential_stack([state_dim] + v_layers + [1]).to(device),
         )
-        self.curiosity = CuriosityAgent(state_dim, action_dim).to(device)
+        self.curiosity = CuriosityAgent(state_dim, action_dim,**kargs).to(device)
 
 
 def train_actor_critic_curiosity(
@@ -65,7 +110,7 @@ def train_actor_critic_curiosity(
     """
     episode_avg_return_list = []
 
-    agent = CuriosityA2C(env, device=device)
+    agent = CuriosityA2C(env,[10,5],[5,2], device=device, channels_embedding = [],channels_next_state = [],channels_action = [10])
 
     optimizer = torch.optim.Adam(
         chain(
@@ -75,6 +120,8 @@ def train_actor_critic_curiosity(
         ),
         lr=learning_rate,
     )
+    buffer = ReplayBuffer(100)
+
 
     for episode_index in range(num_train_episodes):
 
@@ -85,41 +132,33 @@ def train_actor_critic_curiosity(
         )
 
         ep_len = len(episode_rewards)
-        expected_returns = [torch.scalar_tensor(0.)] * (ep_len - 1)
-        gain =  postporcess_tensor(agent.actor_critic.v_critic(
-                preprocess_tensor(episode_states[ep_len - 1], device)/255)
-            )
         
-        for t in range(ep_len - 2, -1, -1):
-            gain = (
-                (1 - intrinsic_reward_integration) * episode_rewards[t]
-                + intrinsic_reward_integration
-                * postporcess_tensor(agent.curiosity.reward(
-                    preprocess_tensor(episode_states[t], device)/255,
-                    preprocess_tensor(action_to_proba(episode_actions[t],5), device)/255,
-                    preprocess_tensor(episode_states[t + 1], device)/255,
-                ))
-                + gain * gamma
-            )
-            expected_returns[t] = gain
-            # value = value.detach().numpy()[0,0]
 
         for t in range(ep_len - 1):
-            value = agent.actor_critic.v_critic(preprocess_tensor(episode_states[t],device)/256)
-            next_value = agent.actor_critic.v_critic(preprocess_tensor(episode_states[t+1],device)/256)
+            buffer.add(episode_states[t],episode_actions[t],episode_states[t+1],episode_rewards[t])
+            state,action, next_state,reward = buffer.sample()
+            state = preprocess_tensor(state,device)/256
+            next_state = preprocess_tensor(next_state,device)/256
+            action = preprocess_tensor(action_to_proba(action, 5), device)
+            value = agent.actor_critic.v_critic(state)
+            next_value = agent.actor_critic.v_critic(next_state)
+            reward = (1-intrinsic_reward_integration) + reward  + intrinsic_reward_integration * agent.curiosity(state,action,state)
 
-            advantage = next_value - value
-            actions_probas = agent.actor_critic.pi_actor(preprocess_tensor(episode_states[t],device)/256)
-            actor_loss = -torch.log(actions_probas)[0,episode_actions[t]] * advantage
-            critic_loss = 0.5 * advantage * advantage
-            loss = policy_weight * (actor_loss + critic_loss) + agent.curiosity.loss(
-                preprocess_tensor(episode_states[t], device) / 256,
-                preprocess_tensor(action_to_proba(episode_actions[t], 5), device),
-                preprocess_tensor(episode_states[t + 1], device) / 256,
+            advantage = value +gamma * reward  - next_value
+            actions_probas = agent.actor_critic.pi_actor(state)
+            actor_loss = -torch.log(actions_probas)[0,episode_actions[t]] * advantage + .000/cross_entropy(actions_probas,actions_probas)**.5
+            critic_loss = 0.5 * advantage**2
+            reg_loss =  agent.curiosity.loss(
+                state,
+                action,
+                next_state,
             ).unsqueeze(0)
-            print(f"{t} actions_probas {actions_probas} advantage{advantage} loss {loss}")
+            loss = policy_weight * (actor_loss + critic_loss) + reg_loss 
+            print(f"{t} actions_probas {actions_probas} advantage{advantage} entropy {cross_entropy(actions_probas,actions_probas)} reward {reward} loss {(actor_loss.item(),critic_loss.item(),reg_loss.item())}")
+            assert not(torch.isnan(loss))
 
             optimizer.zero_grad()
+            # critic_loss.backward()
             loss.backward()
             optimizer.step()
 

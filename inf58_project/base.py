@@ -45,7 +45,7 @@ def policy_stack(channels: list[int]):
     Return a requential stack representing a policy actor over a discrete action space.
     Output represents the probabilities of taking a given action.
     """
-    return sequential_stack(channels) + nn.Sequential(nn.Softmax(-1))
+    return sequential_stack(channels) + nn.Sequential(nn.Softmax(1))
 
 
 class EncodeAction(nn.Module):
@@ -100,7 +100,7 @@ class ICM(nn.Module):
     def reward(
         self, state: torch.Tensor, action: torch.Tensor, next_state: torch.Tensor
     ):
-        return torch.norm(next_state - self(state, action))
+        return ((next_state - self(state, action))**2).sum(1)
 
     def loss(self, state: torch.Tensor, action: torch.Tensor, next_state: torch.Tensor):
         return self.reward(state, action, next_state)
