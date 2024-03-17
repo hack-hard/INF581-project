@@ -86,10 +86,8 @@ def train_actor_critic_curiosity(
 
         ep_len = len(episode_rewards)
         expected_returns = [torch.scalar_tensor(0.)] * (ep_len - 1)
-        values = [torch.scalar_tensor(0.)] * (ep_len - 1)
-        actions_probas = [torch.scalar_tensor(0.)] * (ep_len - 1)
-        gain =  agent.actor_critic.v_critic(
-                preprocess_tensor(episode_states[ep_len - 1], device)/255
+        gain =  postporcess_tensor(agent.actor_critic.v_critic(
+                preprocess_tensor(episode_states[ep_len - 1], device)/255)
             )
         
         for t in range(ep_len - 2, -1, -1):
@@ -104,23 +102,22 @@ def train_actor_critic_curiosity(
                 + gain * gamma
             )
             expected_returns[t] = gain
-            value = agent.actor_critic.v_critic(preprocess_tensor(episode_states[t],device))
             # value = value.detach().numpy()[0,0]
-            values[t] = value
-            actions_probas[t] = agent.actor_critic.pi_actor(preprocess_tensor(episode_states[t],device))
 
         for t in range(ep_len - 1):
-            advantage = expected_returns[t] - values[t]
-            print(advantage)
-            actor_loss = -torch.log(actions_probas[t])[0,episode_actions[t]] * advantage
-            print(actor_loss)
+            value = agent.actor_critic.v_critic(preprocess_tensor(episode_states[t],device)/256)
+            next_value = agent.actor_critic.v_critic(preprocess_tensor(episode_states[t+1],device)/256)
+
+            advantage = next_value - value
+            actions_probas = agent.actor_critic.pi_actor(preprocess_tensor(episode_states[t],device)/256)
+            actor_loss = -torch.log(actions_probas)[0,episode_actions[t]] * advantage
             critic_loss = 0.5 * advantage * advantage
             loss = policy_weight * (actor_loss + critic_loss) + agent.curiosity.loss(
                 preprocess_tensor(episode_states[t], device) / 256,
                 preprocess_tensor(action_to_proba(episode_actions[t], 5), device),
                 preprocess_tensor(episode_states[t + 1], device) / 256,
             ).unsqueeze(0)
-            print(f"loss {loss}")
+            print(f"{t} actions_probas {actions_probas} advantage{advantage} loss {loss}")
 
             optimizer.zero_grad()
             loss.backward()

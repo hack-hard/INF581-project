@@ -45,7 +45,7 @@ def main():  # pragma: no cover
 
     print("stating training")
     device = torch.device("cpu")
-    model, data = train_actor_critic_curiosity(env, device, 100, 3, 100, 0.95,intrinsic_reward_integration=.1)
+    model, data = train_actor_critic_curiosity(env, device, 100, 3, 100, 0.95,intrinsic_reward_integration=.9)
     plt.plot(data)
     plt.savefig("res.png")
     actor = model.actor_critic.pi_actor
@@ -65,17 +65,13 @@ def main():  # pragma: no cover
         done = False
         while not done:
             env.render()
-            obs, reward, terminated, truncated, info = env.step(
-                torch.argmax(
-                    actor(
+            
+            action_probabilities= actor(
                         preprocess_tensor(obs,"cpu")
                         / 256
                     )
-                )
-                .detach()
-                .numpy()
-                .squeeze(0)
-            )
+            sampled_action = torch.multinomial(action_probabilities, 1).item()
+            obs, reward, terminated, truncated, info = env.step(sampled_action)
             done = terminated or truncated
             time.sleep(0)
             print(reward)
