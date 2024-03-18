@@ -38,7 +38,7 @@ def main():  # pragma: no cover
     env = gymnasium.make(
         id="ALE/Pacman-v5",
         full_action_space=False,  # action space is Discrete(5) for NOOP, UP, RIGHT, LEFT, DOWN
-        #render_mode="human",
+        # render_mode="human",
         obs_type="ram",  # observation_space=Box(0, 255, (128,), np.uint8)
         mode=0,  # values in [0,...,7]
         difficulty=0,  # values in [0,1]
@@ -46,7 +46,16 @@ def main():  # pragma: no cover
 
     print("stating training")
     device = torch.device("cpu")
-    model, data = train_actor_critic_curiosity(env, device, 100, 10, 200, .01,policy_weight=4.,intrinsic_reward_integration=.1)
+    model, data = train_actor_critic_curiosity(
+        env,
+        device,
+        500,
+        5,
+        200,
+        0.01,
+        policy_weight=4.0,
+        intrinsic_reward_integration=0.,
+    )
     plt.plot(data)
     plt.savefig("res.png")
     actor = model.actor_critic.pi_actor
@@ -59,7 +68,7 @@ def main():  # pragma: no cover
         mode=0,  # values in [0,...,7]
         difficulty=0,  # values in [0,1]
     )
-    env.metadata['render_fps'] = 20
+    env.metadata["render_fps"] = 20
 
     for game in range(1):
         obs = env.reset()
@@ -67,14 +76,11 @@ def main():  # pragma: no cover
         done = False
         while not done:
             env.render()
-            
-            action_probabilities= actor(
-                        preprocess_tensor(encode_state(obs),"cpu")
-                    )
+
+            action_probabilities = actor(preprocess_tensor(encode_state(obs), "cpu"))
             sampled_action = torch.multinomial(action_probabilities, 1).item()
             obs, reward, terminated, truncated, info = env.step(sampled_action)
             done = terminated or truncated
-            time.sleep(.2)
 
     env.close()
     print("End of execution")

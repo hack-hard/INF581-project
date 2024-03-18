@@ -8,6 +8,7 @@ from typing import Tuple, List
 from numpy.typing import NDArray
 from inf58_project.utils import encode_state, postporcess_tensor, preprocess_tensor
 
+
 def sample_discrete_action(
     policy_nn: nn.Module, state: NDArray[np.float64]
 ) -> Tuple[int, float]:
@@ -30,7 +31,7 @@ def sample_discrete_action(
         The sampled action and its log probability.
 
     """
-    state_tensor = preprocess_tensor(encode_state(state),'cpu') 
+    state_tensor = preprocess_tensor(encode_state(state), "cpu")
     action_probabilities = policy_nn(state_tensor).squeeze(0)
     sampled_action = torch.multinomial(action_probabilities, 1).item()
     sampled_action_log_probability = torch.log(

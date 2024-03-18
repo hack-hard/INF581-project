@@ -75,10 +75,15 @@ class EncodeAction(nn.Module):
         return self.embedding(state)
 
     def predict_action(self, state: torch.Tensor, next_state: torch.Tensor):
-        return self.predict_action_stack(torch.cat((self(state), self(next_state)), dim=-1))
+        return self.predict_action_stack(
+            torch.cat((self(state), self(next_state)), dim=-1)
+        )
 
     def loss(
-        self, state: torch.Tensor,  action_proba: torch.Tensor,next_state: torch.Tensor,
+        self,
+        state: torch.Tensor,
+        action_proba: torch.Tensor,
+        next_state: torch.Tensor,
     ):
         return cross_entropy(action_proba, self.predict_action(state, next_state))
 
@@ -100,7 +105,7 @@ class ICM(nn.Module):
     def reward(
         self, state: torch.Tensor, action: torch.Tensor, next_state: torch.Tensor
     ):
-        return ((next_state - self(state, action))**2).sum(1)
+        return ((next_state - self(state, action)) ** 2).sum(1)
 
     def loss(self, state: torch.Tensor, action: torch.Tensor, next_state: torch.Tensor):
         return self.reward(state, action, next_state)
@@ -134,7 +139,9 @@ class CuriosityAgent(nn.Module):
     def loss(self, state, action, next_state):
         return self.embedding.loss(
             state, action, next_state
-        ) + self.l * self.curiosity.loss(self.embedding(state), action, self.embedding(next_state))
+        ) + self.l * self.curiosity.loss(
+            self.embedding(state), action, self.embedding(next_state)
+        )
 
     def forward(self, state, action, next_state):
         return self.curiosity.reward(
