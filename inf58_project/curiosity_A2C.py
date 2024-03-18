@@ -3,7 +3,7 @@ from os import stat
 import gymnasium
 from typing import List, Tuple
 from gymnasium.spaces import flatten_space
-from inf58_project.utils import preprocess_tensor, postporcess_tensor, action_to_proba
+from inf58_project.utils import encode_state, preprocess_tensor, postporcess_tensor, action_to_proba
 from inf58_project.base import *
 from inf58_project.td6_utils import *
 
@@ -58,7 +58,7 @@ class CuriosityA2C:
     curiosity: CuriosityAgent
 
     def __init__(self, env, pi_layers=[], v_layers=[], device=None, **kargs):
-        state_dim = prod(env.observation_space.shape)
+        state_dim = prod(env.observation_space.shape) * 8 
         action_dim = prod(flatten_space(env.action_space).shape)
         self.actor_critic = A2C(
             policy_stack([state_dim] + pi_layers + [action_dim]).to(device),
@@ -136,13 +136,13 @@ def train_actor_critic_curiosity(
 
         for t in range(ep_len - 1):
             buffer.add(episode_states[t],episode_actions[t],episode_states[t+1],episode_rewards[t])
-            state,action, next_state,reward = buffer.sample()
-            state = preprocess_tensor(state,device)/256
-            next_state = preprocess_tensor(next_state,device)/256
+            state,action, next_state,extrinsic_reward = buffer.sample()
+            state = preprocess_tensor(encode_state(state),device)
+            next_state = preprocess_tensor(encode_state(next_state),device)
             action = preprocess_tensor(action_to_proba(action, 5), device)
             value = agent.actor_critic.v_critic(state)
             next_value = agent.actor_critic.v_critic(next_state)
-            reward = (1-intrinsic_reward_integration) + reward  + intrinsic_reward_integration * agent.curiosity(state,action,state)
+            reward = (1-intrinsic_reward_integration) + extrinsic_reward  + intrinsic_reward_integration * agent.curiosity(state,action,next_state)
 
             advantage = value +gamma * reward  - next_value
             actions_probas = agent.actor_critic.pi_actor(state)
@@ -154,7 +154,7 @@ def train_actor_critic_curiosity(
                 next_state,
             ).unsqueeze(0)
             loss = policy_weight * (actor_loss + critic_loss) + reg_loss 
-            print(f"{t} actions_probas {actions_probas} advantage{advantage} entropy {cross_entropy(actions_probas,actions_probas)} reward {reward} loss {(actor_loss.item(),critic_loss.item(),reg_loss.item())}")
+            print(f"{t} actions_probas {actions_probas} advantage{advantage} entropy {cross_entropy(actions_probas,actions_probas)} reward {extrinsic_reward} loss {(actor_loss.item(),critic_loss.item(),reg_loss.item())} mean_reward {sum(episode_rewards)/len(episode_rewards)}")
             assert not(torch.isnan(loss))
 
             optimizer.zero_grad()

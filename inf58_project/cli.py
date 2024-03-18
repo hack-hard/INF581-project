@@ -14,8 +14,9 @@ import torch
 from stable_baselines3.common.env_util import make_atari_env
 from inf58_project.curiosity_A2C import train_actor_critic_curiosity
 import matplotlib.pyplot as plt
+import numpy as np
 
-from inf58_project.utils import preprocess_tensor
+from inf58_project.utils import encode_state, preprocess_tensor
 
 
 def main():  # pragma: no cover
@@ -68,8 +69,7 @@ def main():  # pragma: no cover
             env.render()
             
             action_probabilities= actor(
-                        preprocess_tensor(obs,"cpu")
-                        / 256
+                        preprocess_tensor(encode_state(obs),"cpu")
                     )
             sampled_action = torch.multinomial(action_probabilities, 1).item()
             obs, reward, terminated, truncated, info = env.step(sampled_action)
