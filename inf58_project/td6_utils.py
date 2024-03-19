@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from typing import Tuple, List
 from numpy.typing import NDArray
-from inf58_project.utils import encode_state, postporcess_tensor, preprocess_tensor
+from inf58_project.utils import encode_state, postprocess_tensor, preprocess_tensor
 
 
 def sample_discrete_action(

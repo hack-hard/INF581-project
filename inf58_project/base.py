@@ -28,7 +28,7 @@ def sequential_stack(channels: list[int]) -> nn.Sequential:
     A function that return a dense sequential network parametrised by channels.
     """
     modules = chain.from_iterable(
-        (nn.Linear(channels[i], channels[i + 1]), nn.ReLU())
+        (nn.Linear(channels[i], channels[i + 1]), nn.Softplus())
         for i in range(len(channels) - 1)
     )
     return nn.Sequential(*modules)
@@ -150,3 +150,4 @@ class CuriosityAgent(nn.Module):
 
     def reward(self, state, action, next_state):
         return self(state, action, next_state)
+

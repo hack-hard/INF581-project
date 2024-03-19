@@ -1,12 +1,13 @@
 from math import prod
 from os import stat
+import sys
 import gymnasium
 from typing import List, Tuple
 from gymnasium.spaces import flatten_space
 from inf58_project.utils import (
     encode_state,
     preprocess_tensor,
-    postporcess_tensor,
+    postprocess_tensor,
     action_to_proba,
 )
 from inf58_project.base import *
@@ -74,6 +75,11 @@ class CuriosityA2C:
         )
         self.curiosity = CuriosityAgent(state_dim, action_dim, **kargs).to(device)
 
+    def load(self, checkpoint):
+        self.actor_critic.pi_actor.load_state_dict(checkpoint["pi_actor"])
+        self.actor_critic.v_critic.load_state_dict(checkpoint["v_critic"])
+        self.curiosity.load_state_dict(checkpoint["curiosity"])
+
 
 def get_loss(
     agent,
@@ -109,15 +115,15 @@ def get_loss(
         action_tensor,
         next_state,
     ).unsqueeze(0)
-    print("-------------------")
-    print(f"actions_probas{actions_probas}")
-    print(f"advantage {advantage.item() }")
-    print(f"entropy {cross_entropy(actions_probas,actions_probas)}")
-    print(f"reward {reward.item()}")
-    print(f"loss {(actor_loss.item(),critic_loss.item(),reg_loss.item())}")
-    print(f"value {value.item()}")
-    print(f"nextvalue {next_value.item()}")
-    print(f"int {intrinsic_reward_integration}")
+    # sys.stdout.write("-------------------\n")
+    # sys.stdout.write(f"actions_probas{actions_probas}\n")
+    # sys.stdout.write(f"advantage {advantage.item() }\n")
+    # sys.stdout.write(f"entropy {cross_entropy(actions_probas,actions_probas)}\n")
+    # sys.stdout.write(f"reward {reward.item()}\n")
+    # sys.stdout.write(f"loss {(actor_loss.item(),critic_loss.item(),reg_loss.item())}\n")
+    # sys.stdout.write(f"value {value.item()}\n")
+    # sys.stdout.write(f"nextvalue {next_value.item()}\n")
+    # sys.stdout.write(f"int {intrinsic_reward_integration}\n")
     return policy_weight * (actor_loss + critic_loss) + reg_loss
 
 
@@ -127,7 +133,9 @@ def train_actor_critic_curiosity(
     num_train_episodes: int,
     num_test_per_episode: int,
     max_episode_duration: int,
-    learning_rate: float,
+    learning_rate: float = 0.01,
+    checkpoint_frequency: int = 20,
+    checkpoint_path: str = None,
     gamma: float = 0.99,
     intrinsic_reward_integration: float = 0.2,
     policy_weight: float = 1.5,
@@ -152,6 +160,10 @@ def train_actor_critic_curiosity(
         The discount factor
     learning_rate : float
         The initial step size.
+    checkpoint_frequency: int
+        Save a checkpoint every ___ episodes
+    checkpoint_path: str
+        Location to store the checkpoint
     intrinsic_reward_integration: float
         the importance of the intrinsic (curiosity) reward relative to the extrinsic one
     policy_weight: float
@@ -166,8 +178,8 @@ def train_actor_critic_curiosity(
 
     agent = CuriosityA2C(
         env,
-        [200, 50, 5],
-        [200, 50, 5],
+        pi_layers=[200, 50, 5],
+        v_layers=[200, 50, 5],
         device=device,
         channels_embedding=[],
         channels_next_state=[],
@@ -186,8 +198,8 @@ def train_actor_critic_curiosity(
     )
     buffer = ReplayBuffer(1000)
 
-    for episode in range(num_train_episodes):
-
+    for episode in range(1,num_train_episodes+1):
+        sys.stdout.write("ep {}\n".format(episode))
         episode_states, episode_actions, episode_rewards, _ = sample_one_episode(
             env, control_agent, max_episode_duration, render=False
         )
@@ -235,5 +247,18 @@ def train_actor_critic_curiosity(
 
             # Monitoring
             episode_avg_return_list.append(test_avg_return)
+        
+        # Save checkpoint
+        if checkpoint_path != None and episode % checkpoint_frequency == 0:
+            savefile_name = checkpoint_path + "checkpoint_{}.pt".format(episode)
+            sys.stdout.write("Saving into {}\n".format(savefile_name))
+            torch.save({
+                "epoch": episode,
+                "pi_actor": agent.actor_critic.pi_actor.state_dict(),
+                "v_critic": agent.actor_critic.v_critic.state_dict(),
+                "curiosity": agent.curiosity.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                }, savefile_name
+            )
 
     return agent, episode_avg_return_list

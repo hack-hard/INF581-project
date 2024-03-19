@@ -11,6 +11,7 @@ import gymnasium
 import numpy
 import time
 import stable_baselines3
+import sys
 
 import gymnasium
 import time
@@ -53,17 +54,23 @@ def main():  # pragma: no cover
     model, data = train_actor_critic_curiosity(
         env,
         device,
-        500,
-        5,
-        200,
-        0.01,
+        num_train_episodes=200,
+        num_test_per_episode=5,
+        max_episode_duration=3000,
+        learning_rate=0.01,
         policy_weight=4.0,
-        intrinsic_reward_integration=0.,
+        checkpoint_path="./saved_models/",
+        intrinsic_reward_integration=0.2,
     )
     plt.plot(data)
     plt.savefig("res.png")
     actor = model.actor_critic.pi_actor
     print("final agent")
+
+    #############################
+    ##### Testing the model #####
+    #############################
+
     env = gymnasium.make(
         id="ALE/Pacman-v5",
         full_action_space=False,  # action space is Discrete(5) for NOOP, UP, RIGHT, LEFT, DOWN
@@ -75,8 +82,7 @@ def main():  # pragma: no cover
     env.metadata["render_fps"] = 20
 
     for game in range(1):
-        obs = env.reset()
-        obs = obs[0]
+        obs, info = env.reset()
         done = False
         while not done:
             env.render()
