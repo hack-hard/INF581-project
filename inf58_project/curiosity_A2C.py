@@ -1,4 +1,4 @@
-from math import prod
+from math import isnan, prod
 from os import stat
 import sys
 import gymnasium
@@ -82,20 +82,20 @@ class CuriosityA2C:
 
 
 def get_loss(
-    agent,
-    state,
-    action,
-    next_state,
-    extrinsic_reward,
-    done,
+        agent:CuriosityA2C,
+    state:np.ndarray,
+    action:int,
+    next_state:np.ndarray,
+    extrinsic_reward:int,
+    done:bool,
     *,
     intrinsic_reward_integration: float,
     device,
     gamma: float,
     policy_weight: float,
 ):
-    next_state = preprocess_tensor(encode_state(next_state), device)
     state = preprocess_tensor(encode_state(state), device)
+    next_state = preprocess_tensor(encode_state(next_state), device)
     action_tensor = preprocess_tensor(action_to_proba(action, 5), device)
     value = agent.actor_critic.v_critic(state)
     next_value = agent.actor_critic.v_critic(next_state)
@@ -108,7 +108,7 @@ def get_loss(
 
     advantage = reward + (1 - done) * gamma * next_value - value
     actions_probas = agent.actor_critic.pi_actor(state)
-    actor_loss = -torch.log(actions_probas)[0, action] * advantage.detach()
+    actor_loss = -torch.log(actions_probas).mean() * advantage.detach()
     critic_loss = 0.5 * advantage.pow(2)
     reg_loss = agent.curiosity.loss(
         state,
@@ -126,7 +126,6 @@ def get_loss(
     # sys.stdout.write(f"int {intrinsic_reward_integration}\n")
     return policy_weight * (actor_loss + critic_loss) + reg_loss
 
-
 def train_actor_critic_curiosity(
     env: gymnasium.Env,
     device,
@@ -135,7 +134,7 @@ def train_actor_critic_curiosity(
     max_episode_duration: int,
     learning_rate: float = 0.01,
     checkpoint_frequency: int = 20,
-    checkpoint_path: str = None,
+    checkpoint_path: str|None = None,
     gamma: float = 0.99,
     intrinsic_reward_integration: float = 0.2,
     policy_weight: float = 1.5,
@@ -178,12 +177,17 @@ def train_actor_critic_curiosity(
 
     agent = CuriosityA2C(
         env,
+<<<<<<< HEAD
         pi_layers=[200, 50, 5],
         v_layers=[200, 50, 5],
+=======
+        [ 50],
+        [ 50],
+>>>>>>> 828481c (changed Relu to σ)
         device=device,
-        channels_embedding=[],
-        channels_next_state=[],
-        channels_action=[],
+        channels_embedding=[10],
+        channels_next_state=[5],
+        channels_action=[10],
     )
     input(agent)
     control_agent = deepcopy(agent.actor_critic.pi_actor)
@@ -223,7 +227,7 @@ def train_actor_critic_curiosity(
                 state,
                 action,
                 next_state,
-                1,
+                extrinsic_reward,
                 done,
                 intrinsic_reward_integration=intrinsic_reward_integration,
                 gamma=gamma,
@@ -231,7 +235,7 @@ def train_actor_critic_curiosity(
                 policy_weight=policy_weight,
             ).backward()
             optimizer.step()
-        if episode % 20 == 0:
+        if episode % 50 == 0:
             control_agent.load_state_dict(agent.actor_critic.pi_actor.state_dict())
 
 
