@@ -197,6 +197,7 @@ def train_actor_critic_curiosity(
         ),
         weight_decay=0.001,
         lr=learning_rate,
+        weight_decay = .01,
     )
     buffer = ReplayBuffer(1000)
 
