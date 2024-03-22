@@ -199,6 +199,7 @@ def train_actor_critic_curiosity(
             agent.curiosity.parameters(),
         ),
         lr=learning_rate,
+        weight_decay = .01,
     )
     buffer = ReplayBuffer(1000)
 
