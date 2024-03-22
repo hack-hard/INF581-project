@@ -199,7 +199,6 @@ def train_actor_critic_curiosity(
     buffer = ReplayBuffer(1000)
 
     for episode in range(1,num_train_episodes+1):
-        sys.stdout.write("ep {}\n".format(episode))
         episode_states, episode_actions, episode_rewards, _ = sample_one_episode(
             env, control_agent, max_episode_duration, render=False
         )
@@ -247,6 +246,7 @@ def train_actor_critic_curiosity(
 
             # Monitoring
             episode_avg_return_list.append(test_avg_return)
+            sys.stdout.write("ep {} reward{} \n".format(episode,test_avg_return))
         
         # Save checkpoint
         if checkpoint_path != None and episode % checkpoint_frequency == 0:
