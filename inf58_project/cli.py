@@ -58,7 +58,7 @@ def main():  # pragma: no cover
         num_train_episodes=200,
         num_test_per_episode=5,
         max_episode_duration=3000,
-        learning_rate=0.01,
+        learning_rate=0.001,
         policy_weight=4.0,
         checkpoint_path="./saved_models/",
         intrinsic_reward_integration=0.2,
