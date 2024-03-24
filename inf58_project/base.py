@@ -29,9 +29,9 @@ def sequential_stack(channels: list[int]) -> nn.Sequential:
     """
     modules = chain.from_iterable(
         (nn.Linear(channels[i], channels[i + 1]), nn.Softplus())
-        for i in range(len(channels) - 1)
+        for i in range(len(channels) - 2)
     )
-    return nn.Sequential(*modules)
+    return nn.Sequential(*modules,nn.Linear(-2,-1))
 
 
 @dataclass
