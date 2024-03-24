@@ -177,8 +177,8 @@ def train_actor_critic_curiosity(
 
     agent = CuriosityA2C(
         env,
-        pi_layers=[200, 50, 5],
-        v_layers=[200, 50, 5],
+        pi_layers=[200, 50],
+        v_layers=[200, 50],
         device=device,
         channels_embedding=[10],
         channels_next_state=[23],
