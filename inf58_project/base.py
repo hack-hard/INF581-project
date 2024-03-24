@@ -31,7 +31,7 @@ def sequential_stack(channels: list[int]) -> nn.Sequential:
         (nn.Linear(channels[i], channels[i + 1]), nn.Softplus())
         for i in range(len(channels) - 2)
     )
-    return nn.Sequential(*modules,nn.Linear(-2,-1))
+    return nn.Sequential(*modules,nn.Linear(channels[-2],channels[-1]))
 
 
 @dataclass
