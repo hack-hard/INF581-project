@@ -53,7 +53,7 @@ def main():  # pragma: no cover
         max_episode_duration=3000,
         learning_rate=0.0005,
         policy_weight=4.0,
-        checkpoint_path="~/saved_models/",
+        checkpoint_path="./saved_models/",
         intrinsic_reward_integration=0.2,
     )
     plt.plot(data)
