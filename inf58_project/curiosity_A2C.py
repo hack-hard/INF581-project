@@ -181,8 +181,8 @@ def train_actor_critic_curiosity(
         v_layers=[200, 50, 5],
         device=device,
         channels_embedding=[10],
-        channels_next_state=[5],
-        channels_action=[10],
+        channels_next_state=[23],
+        channels_action=[],
     )
     input(agent)
     control_agent = deepcopy(agent.actor_critic.pi_actor)
