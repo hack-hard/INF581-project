@@ -82,38 +82,37 @@ class CuriosityA2C:
 
 
 def get_loss(
-        agent:CuriosityA2C,
-    state:np.ndarray,
-    action:int,
-    next_state:np.ndarray,
-    extrinsic_reward:int,
-    done:bool,
+    agent: CuriosityA2C,
+    state: np.ndarray,
+    action: int,
+    next_state: np.ndarray,
+    extrinsic_reward: int,
+    done: bool,
     *,
     intrinsic_reward_integration: float,
     device,
     gamma: float,
     policy_weight: float,
 ):
-    state = preprocess_tensor(encode_state(state), device)
-    next_state = preprocess_tensor(encode_state(next_state), device)
+    state_tensor = preprocess_tensor(encode_state(state), device)
+    next_state_tensor = preprocess_tensor(encode_state(next_state), device)
     action_tensor = preprocess_tensor(action_to_proba(action, 5), device)
-    value = agent.actor_critic.v_critic(state)
-    next_value = agent.actor_critic.v_critic(next_state)
+    value = agent.actor_critic.v_critic(state_tensor)
+    next_value = agent.actor_critic.v_critic(next_state_tensor)
     reward = (
-        (1 - intrinsic_reward_integration)*
-        + extrinsic_reward
-        + intrinsic_reward_integration
-        * agent.curiosity(state, action_tensor, next_state)
+        1 - intrinsic_reward_integration
+    ) * +extrinsic_reward + intrinsic_reward_integration * agent.curiosity(
+        state_tensor, action_tensor, next_state_tensor
     )
 
     advantage = reward + (1 - done) * gamma * next_value - value
-    actions_probas = agent.actor_critic.pi_actor(state)
+    actions_probas = agent.actor_critic.pi_actor(state_tensor)
     actor_loss = -torch.log(actions_probas).mean() * advantage.detach()
     critic_loss = 0.5 * advantage.pow(2)
     reg_loss = agent.curiosity.loss(
-        state,
+        state_tensor,
         action_tensor,
-        next_state,
+        next_state_tensor,
     ).unsqueeze(0)
     # sys.stdout.write("-------------------\n")
     # sys.stdout.write(f"actions_probas{actions_probas}\n")
@@ -126,6 +125,7 @@ def get_loss(
     # sys.stdout.write(f"int {intrinsic_reward_integration}\n")
     return policy_weight * (actor_loss + critic_loss) + reg_loss
 
+
 def train_actor_critic_curiosity(
     env: gymnasium.Env,
     device,
@@ -134,7 +134,7 @@ def train_actor_critic_curiosity(
     max_episode_duration: int,
     learning_rate: float = 0.01,
     checkpoint_frequency: int = 20,
-    checkpoint_path: str|None = None,
+    checkpoint_path: str | None = None,
     gamma: float = 0.99,
     intrinsic_reward_integration: float = 0.2,
     policy_weight: float = 1.5,
@@ -194,11 +194,11 @@ def train_actor_critic_curiosity(
             agent.curiosity.parameters(),
         ),
         lr=learning_rate,
-        weight_decay = .01,
+        weight_decay=0.01,
     )
     buffer = ReplayBuffer(1000)
 
-    for episode in range(1,num_train_episodes+1):
+    for episode in range(1, num_train_episodes + 1):
         episode_states, episode_actions, episode_rewards, _ = sample_one_episode(
             env, control_agent, max_episode_duration, render=False
         )
@@ -209,12 +209,12 @@ def train_actor_critic_curiosity(
             buffer.add(
                 episode_states[t],
                 episode_actions[t],
-                episode_states[min(t +1,ep_len -1)],
+                episode_states[min(t + 1, ep_len - 1)],
                 episode_rewards[t],
-                t == ep_len -1 ,
+                t == ep_len - 1,
             )
-            state, action, next_state, extrinsic_reward,done = buffer.sample()
-            assert (state !=next_state).any() or done 
+            state, action, next_state, extrinsic_reward, done = buffer.sample()
+            assert (state != next_state).any() or done
 
             optimizer.zero_grad()
             get_loss(
@@ -233,7 +233,6 @@ def train_actor_critic_curiosity(
         if episode % 50 == 0:
             control_agent.load_state_dict(agent.actor_critic.pi_actor.state_dict())
 
-
         # Test the current policy
         if episode % num_test_per_episode == 0:
             test_avg_return = avg_return_on_multiple_episodes(
@@ -246,19 +245,21 @@ def train_actor_critic_curiosity(
 
             # Monitoring
             episode_avg_return_list.append(test_avg_return)
-            sys.stdout.write("ep {} reward{} \n".format(episode,test_avg_return))
-        
+            sys.stdout.write("ep {} reward {} \n".format(episode, test_avg_return))
+
         # Save checkpoint
         if checkpoint_path != None and episode % checkpoint_frequency == 0:
             savefile_name = checkpoint_path + "checkpoint_{}.pt".format(episode)
             sys.stdout.write("Saving into {}\n".format(savefile_name))
-            torch.save({
-                "epoch": episode,
-                "pi_actor": agent.actor_critic.pi_actor.state_dict(),
-                "v_critic": agent.actor_critic.v_critic.state_dict(),
-                "curiosity": agent.curiosity.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                }, savefile_name
+            torch.save(
+                {
+                    "epoch": episode,
+                    "pi_actor": agent.actor_critic.pi_actor.state_dict(),
+                    "v_critic": agent.actor_critic.v_critic.state_dict(),
+                    "curiosity": agent.curiosity.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                },
+                savefile_name,
             )
 
     return agent, episode_avg_return_list

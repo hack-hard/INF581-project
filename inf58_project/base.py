@@ -150,4 +150,3 @@ class CuriosityAgent(nn.Module):
 
     def reward(self, state, action, next_state):
         return self(state, action, next_state)
-

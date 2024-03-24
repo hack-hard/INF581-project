@@ -3,6 +3,7 @@ import time
 import copy
 import numpy as np
 
+
 def main():
     env = gymnasium.make(
         id="ALE/Pacman-v5",
@@ -27,14 +28,16 @@ def main():
             for i in range(128):
                 a = prev_obs[i]
                 b = obs[i]
-                if a!=b:
-                    print(i, (a,b))
+                if a != b:
+                    print(i, (a, b))
             time.sleep(1)
             done = terminated or truncated
-            if done: break
+            if done:
+                break
 
     env.close()
     print("End of execution")
+
 
 if __name__ == "__main__":
     main()

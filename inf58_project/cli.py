@@ -7,20 +7,13 @@ Be creative! do whatever you want!
 - Start a web application
 - Import things from your .base module
 """
-import gymnasium
-import numpy
-import time
-import stable_baselines3
-import sys
 
-from math import gamma
 import gymnasium
-import time
+
+import gymnasium
 import torch
-from stable_baselines3.common.env_util import make_atari_env
 from inf58_project.curiosity_A2C import train_actor_critic_curiosity
 import matplotlib.pyplot as plt
-import numpy as np
 
 from inf58_project.utils import encode_state, preprocess_tensor
 
@@ -51,7 +44,7 @@ def main():  # pragma: no cover
     )
 
     print("stating training")
-    device = torch.device("cpu")
+    device = torch.device("cuda")
     model, data = train_actor_critic_curiosity(
         env,
         device,
