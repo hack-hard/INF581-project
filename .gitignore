@@ -8,7 +8,7 @@ __pycache__/
 
 #results
 *.png
-saved_models/
+
 
 # Distribution / packaging
 .Python
