@@ -48,7 +48,7 @@ def main():  # pragma: no cover
     model, data = train_actor_critic_curiosity(
         env,
         device,
-        num_train_episodes=20,
+        num_train_episodes=500,
         num_test_per_episode=5,
         max_episode_duration=3000,
         learning_rate=0.0005,
