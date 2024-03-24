@@ -44,14 +44,14 @@ def main():  # pragma: no cover
     )
 
     print("stating training")
-    device = torch.device("cuda")
+    device = torch.device("cpu")
     model, data = train_actor_critic_curiosity(
         env,
         device,
         num_train_episodes=400,
         num_test_per_episode=5,
         max_episode_duration=3000,
-        learning_rate=0.001,
+        learning_rate=0.0005,
         policy_weight=4.0,
         checkpoint_path="./saved_models/",
         intrinsic_reward_integration=0.2,
