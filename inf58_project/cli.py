@@ -48,7 +48,7 @@ def main():  # pragma: no cover
     model, data = train_actor_critic_curiosity(
         env,
         device,
-        num_train_episodes=200,
+        num_train_episodes=400,
         num_test_per_episode=5,
         max_episode_duration=3000,
         learning_rate=0.001,
@@ -70,7 +70,7 @@ def main():  # pragma: no cover
         full_action_space=False,  # action space is Discrete(5) for NOOP, UP, RIGHT, LEFT, DOWN
         render_mode="human",
         obs_type="ram",  # observation_space=Box(0, 255, (128,), np.uint8)
-        mode=0,  # values in [0,...,7]
+        mode=1,  # values in [0,...,7]
         difficulty=0,  # values in [0,1]
     )
     env.metadata["render_fps"] = 20
