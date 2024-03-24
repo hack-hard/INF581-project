@@ -54,12 +54,13 @@ def main():  # pragma: no cover
     model, data = train_actor_critic_curiosity(
         env,
         device,
-        num_train_episodes=200,
+        num_train_episodes=3000,
         num_test_per_episode=5,
         max_episode_duration=3000,
         learning_rate=0.01,
         policy_weight=4.0,
         checkpoint_path="./saved_models/",
+        checkpoint_frequency=50,
         intrinsic_reward_integration=0.2,
     )
     plt.plot(data)

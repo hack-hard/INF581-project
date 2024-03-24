@@ -116,11 +116,11 @@ def get_loss(
         next_state,
     ).unsqueeze(0)
     # sys.stdout.write("-------------------\n")
-    # sys.stdout.write(f"actions_probas{actions_probas}\n")
-    # sys.stdout.write(f"advantage {advantage.item() }\n")
+    sys.stdout.write(f"actions_probas{actions_probas}\n")
+    sys.stdout.write(f"advantage {advantage.item() }\n")
     # sys.stdout.write(f"entropy {cross_entropy(actions_probas,actions_probas)}\n")
-    # sys.stdout.write(f"reward {reward.item()}\n")
-    # sys.stdout.write(f"loss {(actor_loss.item(),critic_loss.item(),reg_loss.item())}\n")
+    sys.stdout.write(f"reward {reward.item()}\n")
+    sys.stdout.write(f"loss {(actor_loss.item(),critic_loss.item(),reg_loss.item())}\n")
     # sys.stdout.write(f"value {value.item()}\n")
     # sys.stdout.write(f"nextvalue {next_value.item()}\n")
     # sys.stdout.write(f"int {intrinsic_reward_integration}\n")
@@ -136,6 +136,7 @@ def train_actor_critic_curiosity(
     learning_rate: float = 0.01,
     checkpoint_frequency: int = 20,
     checkpoint_path: str = None,
+    test_frequency: int = 50,
     gamma: float = 0.99,
     intrinsic_reward_integration: float = 0.2,
     policy_weight: float = 1.5,
@@ -162,8 +163,10 @@ def train_actor_critic_curiosity(
         The initial step size.
     checkpoint_frequency: int
         Save a checkpoint every ___ episodes
-    checkpoint_path: str
-        Location to store the checkpoint
+    checkpoint_path: Optional[str]
+        Location to store the checkpoint (or don't store anything if it's left as "None")
+    test_frequency: int
+        Test and get average result every ___ episodes
     intrinsic_reward_integration: float
         the importance of the intrinsic (curiosity) reward relative to the extrinsic one
     policy_weight: float
@@ -194,6 +197,7 @@ def train_actor_critic_curiosity(
             agent.actor_critic.v_critic.parameters(),
             agent.curiosity.parameters(),
         ),
+        weight_decay=0.001,
         lr=learning_rate,
     )
     buffer = ReplayBuffer(1000)
@@ -236,7 +240,7 @@ def train_actor_critic_curiosity(
 
 
         # Test the current policy
-        if episode % num_test_per_episode == 0:
+        if episode % test_frequency == 0:
             test_avg_return = avg_return_on_multiple_episodes(
                 env=env,
                 policy_nn=agent.actor_critic.pi_actor,
