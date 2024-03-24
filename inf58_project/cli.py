@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 from inf58_project.utils import encode_state, preprocess_tensor
 
 
-def main():  # pragma: no cover
+def main(chekpoint: str | None = None, nb_iteration: int = 500):  # pragma: no cover
     """
     The main function executes on commands:
     `python -m inf58_project` and `$ inf58_project `.
@@ -35,7 +35,7 @@ def main():  # pragma: no cover
         * Run an application (Flask, FastAPI, Django, etc.)
     """
     env = gymnasium.make(
-        id="ALE/Pacman-v5",
+        id="ALE/Pacman-ram-v5",
         full_action_space=False,  # action space is Discrete(5) for NOOP, UP, RIGHT, LEFT, DOWN
         # render_mode="human",
         obs_type="ram",  # observation_space=Box(0, 255, (128,), np.uint8)
@@ -51,10 +51,10 @@ def main():  # pragma: no cover
         num_train_episodes=500,
         num_test_per_episode=5,
         max_episode_duration=3000,
-        learning_rate=0.0005,
+        learning_rate=0.01,
         policy_weight=4.0,
         checkpoint_path="./saved_models/",
-        intrinsic_reward_integration=0.2,
+        intrinsic_reward_integration=0.5,
     )
     plt.plot(data)
     plt.savefig("res.png")
@@ -82,7 +82,7 @@ def main():  # pragma: no cover
             env.render()
 
             action_probabilities = actor(preprocess_tensor(encode_state(obs), "cpu"))
-            sampled_action = torch.multinomial(action_probabilities, 1).item()
+            sampled_action = torch.multinomial(action_probabilities, 1).item() + 1
             obs, reward, terminated, truncated, info = env.step(sampled_action)
             done = terminated or truncated
 

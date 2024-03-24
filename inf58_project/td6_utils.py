@@ -6,7 +6,13 @@ import torch
 import torch.nn as nn
 from typing import Tuple, List
 from numpy.typing import NDArray
-from inf58_project.utils import encode_state, postprocess_tensor, preprocess_tensor
+from inf58_project.base import cross_entropy
+from inf58_project.utils import (
+    encode_state,
+    entropy,
+    postprocess_tensor,
+    preprocess_tensor,
+)
 
 
 def sample_discrete_action(
@@ -33,9 +39,9 @@ def sample_discrete_action(
     """
     state_tensor = preprocess_tensor(encode_state(state), "cpu")
     action_probabilities = policy_nn(state_tensor).squeeze(0)
-    sampled_action = torch.multinomial(action_probabilities, 1).item()
+    sampled_action = 1 + torch.multinomial(action_probabilities, 1).item()
     sampled_action_log_probability = torch.log(
-        action_probabilities[sampled_action]
+        action_probabilities[sampled_action - 1]
     ).item()
 
     # Return the sampled action and its log probability.
@@ -44,7 +50,7 @@ def sample_discrete_action(
 
 def sample_one_episode(
     env: gym.Env, policy_nn: nn.Module, max_episode_duration: int, render: bool = False
-) -> Tuple[List[NDArray[np.float64]], List[int], List[float], List[torch.Tensor]]:
+) -> Tuple[List[NDArray[np.float64]], List[int], List[float], List[float]]:
     """
     Execute one episode within the `env` environment utilizing the policy defined by the `policy_nn` parameter.
 
@@ -92,13 +98,13 @@ def sample_one_episode(
     return episode_states, episode_actions, episode_rewards, episode_log_prob_actions
 
 
-def avg_return_on_multiple_episodes(
+def evaluate_on_multiple_episodes(
     env: gym.Env,
     policy_nn: nn.Module,
     num_test_episode: int,
     max_episode_duration: int,
     render: bool = False,
-) -> float:
+) -> Tuple[float, float]:
     """
     Play multiple episodes of the environment and calculate the average return.
 
@@ -120,10 +126,12 @@ def avg_return_on_multiple_episodes(
     float
         The average return.
     """
-    cum_sum = 0
+    cum_sum = 0.0
+    cum_entropy = 0.0
     for i in range(num_test_episode):
-        _, _, episode_rewards, _ = sample_one_episode(
+        _, _, episode_rewards, episode_log_prob_actions = sample_one_episode(
             env, policy_nn, max_episode_duration
         )
         cum_sum += np.sum(episode_rewards)
-    return cum_sum / num_test_episode
+        cum_entropy += np.mean(episode_log_prob_actions)
+    return cum_sum / num_test_episode, cum_entropy / num_test_episode

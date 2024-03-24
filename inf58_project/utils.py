@@ -1,6 +1,7 @@
 from numpy.core.multiarray import ndarray
 import torch
 import numpy as np
+from numpy.typing import NDArray
 
 
 def preprocess_tensor(tensor: np.ndarray, device) -> torch.Tensor:
@@ -17,3 +18,7 @@ def encode_state(state: np.ndarray) -> np.ndarray:
 
 def action_to_proba(action: int, action_size: int) -> np.ndarray:
     return np.array([i == action for i in range(action_size)])
+
+
+def entropy(p: NDArray[np.float64]) -> float:
+    return -np.sum(p * np.log(p))

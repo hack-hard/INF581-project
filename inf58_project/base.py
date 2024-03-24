@@ -28,10 +28,10 @@ def sequential_stack(channels: list[int]) -> nn.Sequential:
     A function that return a dense sequential network parametrised by channels.
     """
     modules = chain.from_iterable(
-        (nn.Linear(channels[i], channels[i + 1]), nn.Softplus())
+        (nn.Dropout(.1),nn.Linear(channels[i], channels[i + 1]), nn.Softplus())
         for i in range(len(channels) - 2)
     )
-    return nn.Sequential(*modules,nn.Linear(channels[-2],channels[-1]))
+    return nn.Sequential(*modules, nn.Linear(channels[-2], channels[-1]))
 
 
 @dataclass
@@ -114,9 +114,9 @@ class ICM(nn.Module):
 class CuriosityAgent(nn.Module):
     def __init__(
         self,
-        state_dim,
-        action_dim,
-        encoding_dim=20,
+        state_dim: int,
+        action_dim: int,
+        encoding_dim: int = 20,
         *,
         l: float = 1.0,
         channels_embedding: list[int] = [],
