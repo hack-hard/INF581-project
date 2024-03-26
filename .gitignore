@@ -134,3 +134,4 @@ dmypy.json
 
 # templates
 .github/templates/*
+*.pt

@@ -172,6 +172,7 @@ def get_loss(
     )
 
 def train_actor_critic_curiosity(
+    agent:CuriosityA2C,
     env: gymnasium.Env,
     device,
     num_train_episodes: int,
@@ -220,16 +221,6 @@ def train_actor_critic_curiosity(
     """
     episode_avg_return_list = []
 
-    agent = CuriosityA2C(
-        env,
-        pi_layers=[100],
-        v_layers=[100],
-        device=device,
-        channels_embedding=[10],
-        channels_next_state=[23],
-        channels_action=[],
-    )
-    input(agent)
     control_agent = deepcopy(agent.actor_critic.pi_actor)
 
     optimizer = torch.optim.Adam(
@@ -241,7 +232,7 @@ def train_actor_critic_curiosity(
         lr=learning_rate,
         weight_decay=0.1,
     )
-    buffer = ReplayBuffer(10000)
+    buffer = ReplayBuffer(100000)
 
     for episode in range(1, num_train_episodes + 1):
         episode_states, episode_actions, episode_rewards, _ = sample_one_episode(
@@ -275,7 +266,7 @@ def train_actor_critic_curiosity(
                 policy_weight=policy_weight,
             ).backward()
             optimizer.step()
-        if episode % 50 == 0:
+        if episode % 30 == 0:
             control_agent.load_state_dict(agent.actor_critic.pi_actor.state_dict())
 
         # Test the current policy

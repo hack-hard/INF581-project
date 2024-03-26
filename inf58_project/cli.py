@@ -12,13 +12,13 @@ import gymnasium
 
 import gymnasium
 import torch
-from inf58_project.curiosity_A2C import train_actor_critic_curiosity
+from inf58_project.curiosity_A2C import train_actor_critic_curiosity, CuriosityA2C
 import matplotlib.pyplot as plt
 
 from inf58_project.utils import encode_state, preprocess_tensor
 
 
-def main(chekpoint: str | None = None, nb_iteration: int = 500):  # pragma: no cover
+def main(checkpoint: str | None = None, nb_iteration: int = 500):  # pragma: no cover
     """
     The main function executes on commands:
     `python -m inf58_project` and `$ inf58_project `.
@@ -42,13 +42,26 @@ def main(chekpoint: str | None = None, nb_iteration: int = 500):  # pragma: no c
         mode=1,  # values in [0,...,7]
         difficulty=0,  # values in [0,1]
     )
+    device = torch.device("cpu")
+    agent = CuriosityA2C(
+        env,
+        pi_layers=[100,20],
+        v_layers=[100,20],
+        device=device,
+        channels_embedding=[10],
+        channels_next_state=[23],
+        channels_action=[],
+    )
+    if checkpoint is not None:
+        pass
+    input(agent)
 
     print("stating training")
-    device = torch.device("cpu")
     model, data = train_actor_critic_curiosity(
+        agent,
         env,
         device,
-        num_train_episodes=500,
+        num_train_episodes=nb_iteration,
         num_test_per_episode=5,
         max_episode_duration=3000,
         learning_rate=0.01,
