@@ -90,6 +90,14 @@ class CuriosityA2C:
         self.curiosity.load_state_dict(checkpoint["curiosity"])
 
 
+def clip_norm(prob:torch.Tensor,max:float) -> torch.Tensor:
+    m = prob.max()
+    if m > max:
+        # print("clipping")
+        return m/max * prob
+    else:
+        return prob
+
 def get_loss(
     agent: CuriosityA2C,
     state: np.ndarray,
@@ -103,6 +111,12 @@ def get_loss(
     gamma: float,
     policy_weight: float,
 ):
+    def norm(x: torch.Tensor):
+        return torch.linalg.norm(x.flatten(), float("inf")).item()
+
+    norms = {k: norm(v) for k, v in agent.actor_critic.pi_actor.state_dict().items()}
+    # sys.stdout.write(f"norm {norms}\t")
+
     state_tensor = preprocess_tensor(encode_state(state), device)
     next_state_tensor = preprocess_tensor(encode_state(next_state), device)
     action_tensor = preprocess_tensor(action_to_proba(action, 4), device)
@@ -116,9 +130,14 @@ def get_loss(
     )
 
     advantage = reward + (1 - done) * gamma * next_value - value
-    actions_probas = agent.actor_critic.pi_actor(state_tensor)
+    try:
+        actions_probas = agent.actor_critic.pi_actor(state_tensor) + 1e-8
+    except Exception as e:
+        print(f"norms{norms}")
+        raise(e)
+
     assert not (torch.isnan(actions_probas).any())
-    actor_loss = -torch.log(actions_probas).mean() * advantage.detach()
+    actor_loss = clip_norm(-torch.log(actions_probas),4)[0,action -1] * advantage.detach()
     assert not (
         torch.isnan(actor_loss).all()
     ), f"actor loss : {actor_loss} actions_probas:{actions_probas}"
@@ -131,7 +150,9 @@ def get_loss(
     # sys.stdout.write("-------------------\n")
     # sys.stdout.write(f"actions_probas{actions_probas.detach().numpy()}\n")
     # sys.stdout.write(f"advantage {advantage.item() }\n")
-    sys.stdout.write(f"entropy {cross_entropy(actions_probas,actions_probas).item()}\n")
+
+    # sys.stdout.write(f"plog {torch.log(actions_probas).min().item()}\n")
+
     # sys.stdout.write(f"reward {reward.item()}\n")
     # sys.stdout.write(f"loss {(actor_loss.item(),critic_loss.item(),reg_loss.item())}\n")
     # sys.stdout.write(f"value {value.item()}\n")
@@ -139,9 +160,16 @@ def get_loss(
     # sys.stdout.write(f"int {intrinsic_reward_integration}\n")
     return (
         policy_weight * (actor_loss + critic_loss)
-        + reg_loss + .01 * torch.log(cross_entropy(actions_probas,actions_probas))**2
+        + reg_loss
+        # - torch.log( actions_probas).min()
+        + 0.02
+        * sum(
+            map(
+                lambda x: torch.linalg.norm(x.flatten(), 1),
+                agent.actor_critic.pi_actor.parameters(),
+            )
+        )
     )
-
 
 def train_actor_critic_curiosity(
     env: gymnasium.Env,
@@ -246,7 +274,6 @@ def train_actor_critic_curiosity(
                 device=device,
                 policy_weight=policy_weight,
             ).backward()
-            torch.nn.utils.clip_grad_norm_(agent.actor_critic.pi_actor.parameters(), 1)
             optimizer.step()
         if episode % 50 == 0:
             control_agent.load_state_dict(agent.actor_critic.pi_actor.state_dict())

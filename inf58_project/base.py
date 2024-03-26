@@ -19,6 +19,7 @@ If you want to replace this with a Flask application run:
 and then choose `flask` as template.
 """
 
+
 class AssertNotNaN(nn.Module):
     def __init__(self, error_message="Input tensor contains NaN values."):
         """
@@ -47,26 +48,28 @@ class AssertNotNaN(nn.Module):
             raise ValueError(f"there is nan {self.error_message}, input {x}")
         return x
 
+
 class SafeSoftmax(nn.Module):
     def forward(self, x):
         """
         Compute softmax values for each row of the input tensor x in a numerically stable way.
-        
+
         Args:
             x (Tensor): Input tensor of shape (batch_size, num_classes).
-        
+
         Returns:
             Tensor: Softmax probabilities of shape (batch_size, num_classes).
         """
         # Subtract the maximum value along the last dimension for numerical stability
         max_vals, _ = torch.max(x, dim=-1, keepdim=True)
         x -= max_vals
-        
+
         # Compute softmax
         softmax_x = F.softmax(x, dim=-1)
-        assert not(torch.isnan(softmax_x).any()), f"prob :{softmax_x} logprob{x})"
-        
+        assert not (torch.isnan(softmax_x).any()), f"prob :{softmax_x} logprob{x})"
+
         return softmax_x
+
 
 def cross_entropy(true_val, pred_val):
     return -torch.sum(true_val * torch.log(pred_val), dim=-1)
@@ -77,10 +80,17 @@ def sequential_stack(channels: list[int]) -> nn.Sequential:
     A function that return a dense sequential network parametrised by channels.
     """
     modules = chain.from_iterable(
-        (nn.Dropout(.1),nn.Linear(channels[i], channels[i + 1]), nn.ReLU(),AssertNotNaN(f"layer {i}"))
+        (
+            nn.Dropout(0.1),
+            nn.Linear(channels[i], channels[i + 1]),
+            nn.Softplus(),
+            AssertNotNaN(f"layer {i}"),
+        )
         for i in range(len(channels) - 2)
     )
-    return nn.Sequential(*modules, nn.Linear(channels[-2], channels[-1]))
+    return nn.Sequential(
+        AssertNotNaN("input"), *modules, nn.Linear(channels[-2], channels[-1])
+    )
 
 
 @dataclass
