@@ -28,7 +28,7 @@ def sequential_stack(channels: list[int]) -> nn.Sequential:
     A function that return a dense sequential network parametrised by channels.
     """
     modules = chain.from_iterable(
-        (nn.Linear(channels[i], channels[i + 1]), nn.ReLU())
+        (nn.Linear(channels[i], channels[i + 1]), nn.Softplus())
         for i in range(len(channels) - 1)
     )
     return nn.Sequential(*modules)
@@ -100,7 +100,10 @@ class ICM(nn.Module):
     def reward(
         self, state: torch.Tensor, action: torch.Tensor, next_state: torch.Tensor
     ):
-        return torch.norm(next_state - self(state, action))
+        return ((next_state - self(state, action)) ** 2).sum(1)
+
+    def loss(self, state: torch.Tensor, action: torch.Tensor, next_state: torch.Tensor):
+        return self.reward(state, action, next_state)
 
     def loss(self, state: torch.Tensor, action: torch.Tensor, next_state: torch.Tensor):
         return self.reward(state, action, next_state)
