@@ -139,7 +139,7 @@ def get_loss(
     # sys.stdout.write(f"int {intrinsic_reward_integration}\n")
     return (
         policy_weight * (actor_loss + critic_loss)
-        + reg_loss
+        + reg_loss + .01 * torch.log(cross_entropy(actions_probas,actions_probas))**2
     )
 
 
@@ -194,8 +194,8 @@ def train_actor_critic_curiosity(
 
     agent = CuriosityA2C(
         env,
-        pi_layers=[200],
-        v_layers=[200],
+        pi_layers=[100],
+        v_layers=[100],
         device=device,
         channels_embedding=[10],
         channels_next_state=[23],
@@ -211,7 +211,7 @@ def train_actor_critic_curiosity(
             agent.curiosity.parameters(),
         ),
         lr=learning_rate,
-        weight_decay=0.01,
+        weight_decay=0.1,
     )
     buffer = ReplayBuffer(10000)
 
@@ -246,6 +246,7 @@ def train_actor_critic_curiosity(
                 device=device,
                 policy_weight=policy_weight,
             ).backward()
+            torch.nn.utils.clip_grad_norm_(agent.actor_critic.pi_actor.parameters(), 1)
             optimizer.step()
         if episode % 50 == 0:
             control_agent.load_state_dict(agent.actor_critic.pi_actor.state_dict())
