@@ -10,6 +10,7 @@ Be creative! do whatever you want!
 import stable_baselines3
 import sys
 
+from math import gamma
 import gymnasium
 import time
 import torch
@@ -42,7 +43,7 @@ def main():  # pragma: no cover
         full_action_space=False,  # action space is Discrete(5) for NOOP, UP, RIGHT, LEFT, DOWN
         #render_mode="human",
         obs_type="ram",  # observation_space=Box(0, 255, (128,), np.uint8)
-        mode=0,  # values in [0,...,7]
+        mode=1,  # values in [0,...,7]
         difficulty=0,  # values in [0,1]
     )
 
