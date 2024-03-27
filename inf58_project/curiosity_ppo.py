@@ -78,9 +78,9 @@ class ICM_PPO(ICM_OnPolicyAlgorithm):
     """
 
     policy_aliases: ClassVar[Dict[str, Type[BasePolicy]]] = {
-        "MlpPolicy": ActorCriticPolicy,
+        # "MlpPolicy": ActorCriticPolicy,
         "CnnPolicy": ActorCriticCnnPolicy,
-        "MultiInputPolicy": MultiInputActorCriticPolicy,
+        # "MultiInputPolicy": MultiInputActorCriticPolicy,
     }
 
     def __init__(

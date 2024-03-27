@@ -7,7 +7,7 @@ def preprocess_tensor(tensor: np.ndarray, device) -> torch.Tensor:
     return torch.tensor(tensor, device=device, dtype=torch.float32).unsqueeze(0)
 
 
-def postporcess_tensor(tensor: torch.Tensor) -> ndarray:
+def postprocess_tensor(tensor: torch.Tensor) -> ndarray:
     return tensor.detach().numpy().squeeze()
 
 

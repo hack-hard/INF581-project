@@ -20,9 +20,9 @@ def main():
             env.render()
             sampled_action = env.action_space.sample()
             obs, reward, terminated, truncated, info = env.step(sampled_action)
-            print(frame, sampled_action, reward, info)
-            cv2.imwrite("render_result.jpg", obs)
-            input()
+            # print(frame, sampled_action, reward, info)
+            # cv2.imwrite("render_result.jpg", obs)
+            # input()
             done = terminated or truncated
             if done: break
             frame+=1

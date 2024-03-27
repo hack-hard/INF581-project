@@ -1,133 +1,86 @@
-from math import isnan, prod
-from os import stat
-import sys
-import gymnasium
-from typing import List, Tuple
-from gymnasium.spaces import flatten_space
-from inf58_project.utils import (
-    encode_state,
-    preprocess_tensor,
-    postprocess_tensor,
-    action_to_proba,
-)
-from inf58_project.base import *
-from inf58_project.td6_utils import *
 from copy import deepcopy
+import sys
+from typing import List, Tuple
+from itertools import chain
+import gymnasium
+from gymnasium.spaces import flatten_space
+from dataclasses import dataclass
 
+import numpy as np
 
-class ReplayBuffer:
-    """
-    A simple replay buffer for storing and sampling experiences,
-    assuming experiences are independent.
-    """
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
-    def __init__(self, max_size):
-        """
-        Initializes the replay buffer.
+from inf58_project.base import (
+    ICM,
+    CuriosityAgent,
+    EncodeAction,
+    sequential_stack,
+    policy_stack,
+    cross_entropy,
+    A2C,
+)
+from inf58_project.curiosity_A2C import CuriosityA2C, ReplayBuffer, get_loss
+from inf58_project.pacman_env import PacManEnv
+from inf58_project.td6_utils import avg_return_on_multiple_episodes, sample_one_episode
+from inf58_project.utils import (
+    action_to_proba, 
+    preprocess_tensor
+)
 
-        Args:
-          max_size: The maximum number of experiences to store in the buffer.
-        """
-        self._buffer = []
-        self._max_size = max_size
-        self._idx = 0
+FLATTENED_ENCODED_SIZE = 19456
 
-    def add(self, *experience):
-        """
-        Adds an experience to the replay buffer.
-
-        Args:
-          experience: A tuple containing the experience (state, action, reward, new_state, done).
-        """
-        if len(self._buffer) == self._max_size:
-            # Replace the oldest experience if the buffer is full
-            self._buffer[self._idx] = experience
-        else:
-            self._buffer.append(experience)
-        self._idx = (self._idx + 1) % self._max_size
-
-    def sample(self):
-        """
-        Samples a random set of experiences from the replay buffer.
-
-        Args:
-          sample_size: The number of experiences to sample.
-
-        Returns:
-          A tuple of lists containing the sampled experiences (states, actions, rewards, new_states, dones).
-        """
-        # Randomly sample indices for the batch
-        indice = np.random.randint(len(self._buffer))
-        return self._buffer[indice]
-
-
-@dataclass
-class CuriosityA2C:
-    actor_critic: A2C
-    curiosity: CuriosityAgent
-
+class CuriosityA2C_CNN(CuriosityA2C):
     def __init__(self, env, pi_layers=[], v_layers=[], device=None, **kargs):
-        state_dim = prod(env.observation_space.shape) * 8
-        action_dim = prod(flatten_space(env.action_space).shape)
+        state_dim = np.prod(env.observation_space.shape)
+        action_dim = np.prod(flatten_space(env.action_space).shape)
         self.actor_critic = A2C(
-            policy_stack([state_dim] + pi_layers + [action_dim]).to(device),
-            sequential_stack([state_dim] + v_layers + [1]).to(device),
+            nn.Sequential(
+                nn.Conv2d(1, 32, kernel_size=8, stride=4, padding=0),
+                nn.ReLU(),
+                nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
+                nn.ReLU(),
+                nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0),
+                nn.ReLU(),
+                nn.Flatten(0), #batch size is 1 anyways
+                policy_stack([FLATTENED_ENCODED_SIZE] + pi_layers + [action_dim]).to(device),
+            ),
+            nn.Sequential(
+                nn.Conv2d(1, 32, kernel_size=8, stride=4, padding=0),
+                nn.ReLU(),
+                nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
+                nn.ReLU(),
+                nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0),
+                nn.ReLU(),
+                nn.Flatten(0), #batch size is 1 anyways
+                sequential_stack([FLATTENED_ENCODED_SIZE] + v_layers + [1]).to(device)
+            )
         )
-        self.curiosity = CuriosityAgent(state_dim, action_dim, **kargs).to(device)
+        """
+        Same as in stable_baselines3 with CnnPolicy
+        CNN from DQN Nature paper:
+            Mnih, Volodymyr, et al.
+            "Human-level control through deep reinforcement learning."
+            Nature 518.7540 (2015): 529-533.
+        """
+        self.encoder = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=8, stride=4, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0),
+            nn.ReLU(),
+            nn.Flatten(0), #batch size is 1 anyways
+        )
+        self.curiosity = CuriosityAgent(FLATTENED_ENCODED_SIZE, action_dim, **kargs).to(device)
 
-    def load(self, checkpoint):
-        self.actor_critic.pi_actor.load_state_dict(checkpoint["pi_actor"])
-        self.actor_critic.v_critic.load_state_dict(checkpoint["v_critic"])
-        self.curiosity.load_state_dict(checkpoint["curiosity"])
-
-
-def get_loss(
-    agent:CuriosityA2C,
-    state:np.ndarray,
-    action:int,
-    next_state:np.ndarray,
-    extrinsic_reward:int,
-    done:bool,
-    *,
-    intrinsic_reward_integration: float,
-    device,
-    gamma: float,
-    policy_weight: float,
-    encoding=encode_state
-):
-    state = preprocess_tensor(encoding(state), device)
-    next_state = preprocess_tensor(encoding(next_state), device)
-    action_tensor = preprocess_tensor(action_to_proba(action, 5), device)
-    value = agent.actor_critic.v_critic(state)
-    next_value = agent.actor_critic.v_critic(next_state)
-    reward = (
-        (1 - intrinsic_reward_integration)*
-        + extrinsic_reward
-        + intrinsic_reward_integration
-        * agent.curiosity(state, action_tensor, next_state)
-    )
-
-    advantage = reward + (1 - done) * gamma * next_value - value
-    actions_probas = agent.actor_critic.pi_actor(state)
-    actor_loss = -torch.log(actions_probas).mean() * advantage.detach()
-    critic_loss = 0.5 * advantage.pow(2)
-    reg_loss = agent.curiosity.loss(
-        state,
-        action_tensor,
-        next_state,
-    ).unsqueeze(0)
-    # sys.stdout.write("-------------------\n")
-    sys.stdout.write(f"actions_probas{actions_probas}\n")
-    sys.stdout.write(f"advantage {advantage.item() }\n")
-    # sys.stdout.write(f"entropy {cross_entropy(actions_probas,actions_probas)}\n")
-    sys.stdout.write(f"reward {reward.item()}\n")
-    sys.stdout.write(f"loss {(actor_loss.item(),critic_loss.item(),reg_loss.item())}\n")
-    # sys.stdout.write(f"value {value.item()}\n")
-    # sys.stdout.write(f"nextvalue {next_value.item()}\n")
-    # sys.stdout.write(f"int {intrinsic_reward_integration}\n")
-    return policy_weight * (actor_loss + critic_loss) + reg_loss
-
-def train_actor_critic_curiosity(
+    # def load(self, checkpoint):
+    #     self.actor_critic.pi_actor.load_state_dict(checkpoint["pi_actor"])
+    #     self.actor_critic.v_critic.load_state_dict(checkpoint["v_critic"])
+    #     self.curiosity.load_state_dict(checkpoint["curiosity"])
+        
+def train_actor_critic_curiosity_CNN(
     env: gymnasium.Env,
     device,
     num_train_episodes: int,
@@ -140,7 +93,7 @@ def train_actor_critic_curiosity(
     checkpoint_path: str|None = None,
     intrinsic_reward_integration: float = 0.2,
     policy_weight: float = 1.5,
-) -> Tuple[CuriosityA2C, List[float]]:
+) -> Tuple[CuriosityA2C_CNN, List[float]]:
     r"""
     Train a policy using the actor_critic algorithm with integrated curiosity.
     Modified from TD6 and https://towardsdatascience.com/understanding-actor-critic-methods-931b97b6df3f
@@ -179,7 +132,7 @@ def train_actor_critic_curiosity(
     """
     episode_avg_return_list = []
 
-    agent = CuriosityA2C(
+    agent = CuriosityA2C_CNN(
         env,
         pi_layers=[200, 50, 5],
         v_layers=[200, 50, 5],
@@ -220,7 +173,7 @@ def train_actor_critic_curiosity(
                 t == ep_len -1 ,
             )
             state, action, next_state, extrinsic_reward,done = buffer.sample()
-            assert (state !=next_state).any() or done 
+            assert (state != next_state).any() or done 
 
             optimizer.zero_grad()
             get_loss(
@@ -234,6 +187,7 @@ def train_actor_critic_curiosity(
                 gamma=gamma,
                 device=device,
                 policy_weight=policy_weight,
+                encoding=agent.encoder
             ).backward()
             optimizer.step()
         if episode % 50 == 0:

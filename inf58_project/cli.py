@@ -22,6 +22,7 @@ import numpy as np
 from inf58_project.utils import encode_state, preprocess_tensor
 
 
+
 def main():  # pragma: no cover
     """
     The main function executes on commands:

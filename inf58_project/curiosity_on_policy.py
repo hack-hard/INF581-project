@@ -167,7 +167,6 @@ class ICM_OnPolicyAlgorithm(BaseAlgorithm):
             chain(
                 self.policy.parameters(),
                 self.curiosity.parameters(),
-                self.curiosity.embedding.parameters(),
             ),
             self.learning_rate,
         )
