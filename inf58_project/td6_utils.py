@@ -39,7 +39,7 @@ def sample_discrete_action(
     """
     state_tensor = preprocess_tensor(encode_state(state), "cpu")
     action_probabilities = policy_nn(state_tensor).squeeze(0)
-    sampled_action = 1 + torch.multinomial(action_probabilities, 1).item()
+    sampled_action = torch.multinomial(action_probabilities, 1).item()
     sampled_action_log_probability = torch.log(
         action_probabilities[sampled_action - 1]
     ).item()
@@ -77,10 +77,17 @@ def sample_one_episode(
     episode_log_prob_actions = []
     episode_rewards = []
     episode_states.append(state_t)
+    lives = None
 
     for t in range(max_episode_duration):
         action, action_log_prob = sample_discrete_action(policy_nn, state_t)
         next_state, reward, terminated, truncated, info = env.step(action)
+        if info["lives"] != lives and info["lives"] > 0:
+            lives = info["lives"]
+            for _ in range(30):
+                next_state, reward, terminated, truncated, info = env.step(action)
+                if terminated:
+                    raise Exception("terminated earlier")
 
         # save episode
         episode_states.append(next_state)

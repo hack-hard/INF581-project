@@ -77,7 +77,7 @@ class CuriosityA2C:
 
     def __init__(self, env, pi_layers=[], v_layers=[], device=None, **kargs):
         state_dim = prod(env.observation_space.shape) * 8
-        action_dim = prod(flatten_space(env.action_space).shape) - 1  # not wait op
+        action_dim = prod(flatten_space(env.action_space).shape)
         self.actor_critic = A2C(
             policy_stack([state_dim] + pi_layers + [action_dim]).to(device),
             sequential_stack([state_dim] + v_layers + [1]).to(device),
@@ -90,13 +90,14 @@ class CuriosityA2C:
         self.curiosity.load_state_dict(checkpoint["curiosity"])
 
 
-def clip_norm(prob:torch.Tensor,max:float) -> torch.Tensor:
+def clip_norm(prob: torch.Tensor, max: float) -> torch.Tensor:
     m = prob.max()
     if m > max:
         # print("clipping")
-        return m/max * prob
+        return m / max * prob
     else:
         return prob
+
 
 def get_loss(
     agent: CuriosityA2C,
@@ -114,12 +115,12 @@ def get_loss(
     def norm(x: torch.Tensor):
         return torch.linalg.norm(x.flatten(), float("inf")).item()
 
-    norms = {k: norm(v) for k, v in agent.actor_critic.pi_actor.state_dict().items()}
+    # norms = {k: norm(v) for k, v in agent.actor_critic.pi_actor.state_dict().items()}
     # sys.stdout.write(f"norm {norms}\t")
 
     state_tensor = preprocess_tensor(encode_state(state), device)
     next_state_tensor = preprocess_tensor(encode_state(next_state), device)
-    action_tensor = preprocess_tensor(action_to_proba(action, 4), device)
+    action_tensor = preprocess_tensor(action_to_proba(action, 5), device)
     value = agent.actor_critic.v_critic(state_tensor)
     next_value = agent.actor_critic.v_critic(next_state_tensor)
     assert not (torch.isnan(state_tensor).any())
@@ -128,16 +129,15 @@ def get_loss(
     ) * +extrinsic_reward + intrinsic_reward_integration * agent.curiosity(
         state_tensor, action_tensor, next_state_tensor
     )
+    reward = 1
 
     advantage = reward + (1 - done) * gamma * next_value - value
-    try:
-        actions_probas = agent.actor_critic.pi_actor(state_tensor) + 1e-8
-    except Exception as e:
-        print(f"norms{norms}")
-        raise(e)
+    actions_probas = agent.actor_critic.pi_actor(state_tensor) + 1e-8
 
     assert not (torch.isnan(actions_probas).any())
-    actor_loss = clip_norm(-torch.log(actions_probas),4)[0,action -1] * advantage.detach()
+    actor_loss = (
+        clip_norm(-torch.log(actions_probas), 4)[0, action - 1] * advantage.detach()
+    )
     assert not (
         torch.isnan(actor_loss).all()
     ), f"actor loss : {actor_loss} actions_probas:{actions_probas}"
@@ -171,8 +171,9 @@ def get_loss(
         )
     )
 
+
 def train_actor_critic_curiosity(
-    agent:CuriosityA2C,
+    agent: CuriosityA2C,
     env: gymnasium.Env,
     device,
     num_train_episodes: int,
@@ -232,9 +233,10 @@ def train_actor_critic_curiosity(
         lr=learning_rate,
         weight_decay=0.1,
     )
-    buffer = ReplayBuffer(100000)
+    buffer = ReplayBuffer(100 * 1000)
 
     for episode in range(1, num_train_episodes + 1):
+        print(".", end="", flush=True)
         episode_states, episode_actions, episode_rewards, _ = sample_one_episode(
             env, control_agent, max_episode_duration, render=False
         )
@@ -242,13 +244,14 @@ def train_actor_critic_curiosity(
         ep_len = len(episode_rewards)
 
         for t in range(ep_len):
-            buffer.add(
-                episode_states[t],
-                episode_actions[t],
-                episode_states[min(t + 1, ep_len - 1)],
-                episode_rewards[t],
-                t == ep_len - 1,
-            )
+            for _ in range(1 + int(sum(episode_rewards) / (10 * len(episode_rewards)))):
+                buffer.add(
+                    episode_states[t],
+                    episode_actions[t],
+                    episode_states[min(t + 1, ep_len - 1)],
+                    episode_rewards[t],
+                    t == ep_len - 1,
+                )
             state, action, next_state, extrinsic_reward, done = buffer.sample()
             assert (state != next_state).any() or done
 
@@ -266,7 +269,7 @@ def train_actor_critic_curiosity(
                 policy_weight=policy_weight,
             ).backward()
             optimizer.step()
-        if episode % 30 == 0:
+        if episode % 50 == 0:
             control_agent.load_state_dict(agent.actor_critic.pi_actor.state_dict())
 
         # Test the current policy

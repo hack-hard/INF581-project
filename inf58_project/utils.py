@@ -13,6 +13,7 @@ def postprocess_tensor(tensor: torch.Tensor) -> ndarray:
 
 
 def encode_state(state: np.ndarray) -> np.ndarray:
+    # return state / 255
     return (np.expand_dims(state, 1) & 1 << np.array([list(range(8))]) != 0).flatten()
 
 

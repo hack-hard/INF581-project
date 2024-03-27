@@ -14,11 +14,14 @@ import gymnasium
 import torch
 from inf58_project.curiosity_A2C import train_actor_critic_curiosity, CuriosityA2C
 import matplotlib.pyplot as plt
+import click
 
 from inf58_project.utils import encode_state, preprocess_tensor
 
-
-def main(checkpoint: str | None = None, nb_iteration: int = 500):  # pragma: no cover
+@click.command()
+@click.option("--checkpoint", default=None) 
+@click.option("--nb_iteration", default = 100)
+def main(checkpoint: str | None, nb_iteration: int):  # pragma: no cover
     """
     The main function executes on commands:
     `python -m inf58_project` and `$ inf58_project `.
@@ -34,6 +37,7 @@ def main(checkpoint: str | None = None, nb_iteration: int = 500):  # pragma: no 
         * List all available tasks
         * Run an application (Flask, FastAPI, Django, etc.)
     """
+    nb_iteration = int(nb_iteration)
     env = gymnasium.make(
         id="ALE/Pacman-ram-v5",
         full_action_space=False,  # action space is Discrete(5) for NOOP, UP, RIGHT, LEFT, DOWN
@@ -45,8 +49,8 @@ def main(checkpoint: str | None = None, nb_iteration: int = 500):  # pragma: no 
     device = torch.device("cpu")
     agent = CuriosityA2C(
         env,
-        pi_layers=[100,20],
-        v_layers=[100,20],
+        pi_layers=[200],
+        v_layers=[200, 10],
         device=device,
         channels_embedding=[10],
         channels_next_state=[23],
@@ -62,7 +66,7 @@ def main(checkpoint: str | None = None, nb_iteration: int = 500):  # pragma: no 
         env,
         device,
         num_train_episodes=nb_iteration,
-        num_test_per_episode=5,
+        num_test_per_episode=10,
         max_episode_duration=3000,
         learning_rate=0.01,
         policy_weight=4.0,
@@ -95,7 +99,7 @@ def main(checkpoint: str | None = None, nb_iteration: int = 500):  # pragma: no 
             env.render()
 
             action_probabilities = actor(preprocess_tensor(encode_state(obs), "cpu"))
-            sampled_action = torch.multinomial(action_probabilities, 1).item() + 1
+            sampled_action = torch.multinomial(action_probabilities, 1).item()
             obs, reward, terminated, truncated, info = env.step(sampled_action)
             done = terminated or truncated
 

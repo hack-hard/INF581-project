@@ -134,4 +134,4 @@ dmypy.json
 
 # templates
 .github/templates/*
-*.pt
+saved_models/*.pt
