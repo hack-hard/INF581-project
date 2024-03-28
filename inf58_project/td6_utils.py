@@ -6,11 +6,11 @@ import torch
 import torch.nn as nn
 from typing import Tuple, List
 from numpy.typing import NDArray
-from inf58_project.utils import encode_state, postprocess_tensor, preprocess_tensor
+from inf58_project.utils import default_encode, postprocess_tensor, preprocess_tensor
 
 
 def sample_discrete_action(
-    policy_nn: nn.Module, state: NDArray[np.float64]
+    policy_nn: nn.Module, state: NDArray[np.float64], feature_extractor=default_encode
 ) -> Tuple[int, float]:
     """
     Sample a discrete action based on the given state and policy network.
@@ -31,7 +31,7 @@ def sample_discrete_action(
         The sampled action and its log probability.
 
     """
-    state_tensor = preprocess_tensor(encode_state(state), "cpu")
+    state_tensor = feature_extractor(state, "cpu")
     action_probabilities = policy_nn(state_tensor).squeeze(0)
     sampled_action = torch.multinomial(action_probabilities, 1).item()
     sampled_action_log_probability = torch.log(
@@ -43,7 +43,11 @@ def sample_discrete_action(
 
 
 def sample_one_episode(
-    env: gym.Env, policy_nn: nn.Module, max_episode_duration: int, render: bool = False
+    env: gym.Env, 
+    policy_nn: nn.Module, 
+    max_episode_duration: int, 
+    render: bool = False, 
+    feature_extractor = default_encode
 ) -> Tuple[List[NDArray[np.float64]], List[int], List[float], List[torch.Tensor]]:
     """
     Execute one episode within the `env` environment utilizing the policy defined by the `policy_nn` parameter.
@@ -58,7 +62,9 @@ def sample_one_episode(
         The maximum duration of the episode.
     render : bool, optional
         Whether to render the environment, by default False.
-
+    feature_extractor: function
+        How are the state features extracted
+        
     Returns
     -------
     Tuple[List[NDArray[np.float64]], List[int], List[float], List[torch.Tensor]]
@@ -73,7 +79,7 @@ def sample_one_episode(
     episode_states.append(state_t)
 
     for t in range(max_episode_duration):
-        action, action_log_prob = sample_discrete_action(policy_nn, state_t)
+        action, action_log_prob = sample_discrete_action(policy_nn, state_t, feature_extractor=feature_extractor)
         next_state, reward, terminated, truncated, info = env.step(action)
 
         # save episode
@@ -98,6 +104,7 @@ def avg_return_on_multiple_episodes(
     num_test_episode: int,
     max_episode_duration: int,
     render: bool = False,
+    feature_extractor = default_encode
 ) -> float:
     """
     Play multiple episodes of the environment and calculate the average return.
@@ -114,7 +121,9 @@ def avg_return_on_multiple_episodes(
         The maximum duration of an episode.
     render : bool, optional
         Whether to render the environment, by default False.
-
+    feature_extractor: function
+        How to extract the state features
+        
     Returns
     -------
     float
@@ -123,7 +132,7 @@ def avg_return_on_multiple_episodes(
     cum_sum = 0
     for i in range(num_test_episode):
         _, _, episode_rewards, _ = sample_one_episode(
-            env, policy_nn, max_episode_duration
+            env, policy_nn, max_episode_duration, feature_extractor=feature_extractor
         )
         cum_sum += np.sum(episode_rewards)
     return cum_sum / num_test_episode

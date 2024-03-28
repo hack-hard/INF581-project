@@ -14,6 +14,8 @@ def postprocess_tensor(tensor: torch.Tensor) -> ndarray:
 def encode_state(state: np.ndarray) -> np.ndarray:
     return (np.expand_dims(state, 1) & 1 << np.array([list(range(8))]) != 0).flatten()
 
+def default_encode(state:np.ndarray, device):
+    return preprocess_tensor(encode_state(state), device)
 
 def action_to_proba(action: int, action_size: int) -> np.ndarray:
     return np.array([i == action for i in range(action_size)])

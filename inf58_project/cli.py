@@ -7,19 +7,13 @@ Be creative! do whatever you want!
 - Start a web application
 - Import things from your .base module
 """
-import stable_baselines3
-import sys
 
-from math import gamma
-import gymnasium
-import time
 import torch
-from stable_baselines3.common.env_util import make_atari_env
-from inf58_project.curiosity_A2C import train_actor_critic_curiosity
 import matplotlib.pyplot as plt
-import numpy as np
 
-from inf58_project.utils import encode_state, preprocess_tensor
+from inf58_project.cnn_curiosity import train_actor_critic_curiosity_CNN
+from inf58_project.pacman_env import PacManEnv
+from inf58_project.utils import preprocess_tensor
 
 
 
@@ -39,18 +33,11 @@ def main():  # pragma: no cover
         * List all available tasks
         * Run an application (Flask, FastAPI, Django, etc.)
     """
-    env = gymnasium.make(
-        id="ALE/Pacman-v5",
-        full_action_space=False,  # action space is Discrete(5) for NOOP, UP, RIGHT, LEFT, DOWN
-        #render_mode="human",
-        obs_type="ram",  # observation_space=Box(0, 255, (128,), np.uint8)
-        mode=1,  # values in [0,...,7]
-        difficulty=0,  # values in [0,1]
-    )
+    env = PacManEnv(render_mode=None)
 
-    print("stating training")
+    print("starting training")
     device = torch.device("cpu")
-    model, data = train_actor_critic_curiosity(
+    model, data = train_actor_critic_curiosity_CNN(
         env,
         device,
         num_train_episodes=200,
@@ -62,9 +49,11 @@ def main():  # pragma: no cover
         checkpoint_path="./saved_models/",
         checkpoint_frequency=50,
         intrinsic_reward_integration=0.2,
+        verbose=True
     )
     plt.plot(data)
     plt.savefig("res.png")
+    feature_extractor = model.feature_extractor
     actor = model.actor_critic.pi_actor
     print("final agent")
 
@@ -72,23 +61,15 @@ def main():  # pragma: no cover
     ##### Testing the model #####
     #############################
 
-    env = gymnasium.make(
-        id="ALE/Pacman-v5",
-        full_action_space=False,  # action space is Discrete(5) for NOOP, UP, RIGHT, LEFT, DOWN
-        render_mode="human",
-        obs_type="ram",  # observation_space=Box(0, 255, (128,), np.uint8)
-        mode=0,  # values in [0,...,7]
-        difficulty=0,  # values in [0,1]
-    )
-    env.metadata["render_fps"] = 20
+    env = PacManEnv(render_mode="human")
+    # env.metadata["render_fps"] = 20
 
     for game in range(1):
         obs, info = env.reset()
         done = False
         while not done:
             env.render()
-
-            action_probabilities = actor(preprocess_tensor(encode_state(obs), "cpu"))
+            action_probabilities = actor(preprocess_tensor(feature_extractor(obs), "cpu"))
             sampled_action = torch.multinomial(action_probabilities, 1).item()
             obs, reward, terminated, truncated, info = env.step(sampled_action)
             done = terminated or truncated

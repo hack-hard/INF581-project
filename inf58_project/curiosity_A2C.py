@@ -5,7 +5,7 @@ import gymnasium
 from typing import List, Tuple
 from gymnasium.spaces import flatten_space
 from inf58_project.utils import (
-    encode_state,
+    default_encode,
     preprocess_tensor,
     postprocess_tensor,
     action_to_proba,
@@ -93,10 +93,10 @@ def get_loss(
     device,
     gamma: float,
     policy_weight: float,
-    encoding=encode_state
+    encoding=default_encode
 ):
-    state = preprocess_tensor(encoding(state), device)
-    next_state = preprocess_tensor(encoding(next_state), device)
+    state = default_encode(state, device)
+    next_state = default_encode(next_state, device)
     action_tensor = preprocess_tensor(action_to_proba(action, 5), device)
     value = agent.actor_critic.v_critic(state)
     next_value = agent.actor_critic.v_critic(next_state)
@@ -197,9 +197,8 @@ def train_actor_critic_curiosity(
             agent.actor_critic.v_critic.parameters(),
             agent.curiosity.parameters(),
         ),
-        weight_decay=0.001,
         lr=learning_rate,
-        weight_decay = .01,
+        weight_decay = 0.01,
     )
     buffer = ReplayBuffer(1000)
 

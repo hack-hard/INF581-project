@@ -24,7 +24,7 @@ from inf58_project.pacman_env import PacManEnv
 LOG_DIR = "logs/"
 
 env = PacManEnv(debug=False)
-env = Monitor(env, LOG_DIR)
+# env = Monitor(env, LOG_DIR)
 # print(env.observation_space)
 # check_env(env)
 # print("check env done")
@@ -37,10 +37,10 @@ model = PPO(
     n_steps=2048,
     batch_size=64
 )
-print("learning")
-for i in range(1,11):
-    model.learn(total_timesteps=100*1000)
-    model.save("saved_models/ppo_{}e5_steps_resized".format(i))
+# print("learning")
+# for i in range(1,11):
+#     model.learn(total_timesteps=100*1000)
+#     model.save("saved_models/ppo_{}e5_steps_resized".format(i))
 
 # del model # remove to demonstrate saving and loading
 

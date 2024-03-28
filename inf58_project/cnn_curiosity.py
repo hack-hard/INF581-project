@@ -21,7 +21,7 @@ from inf58_project.base import (
     cross_entropy,
     A2C,
 )
-from inf58_project.curiosity_A2C import CuriosityA2C, ReplayBuffer, get_loss
+from inf58_project.curiosity_A2C import ReplayBuffer
 from inf58_project.pacman_env import PacManEnv
 from inf58_project.td6_utils import avg_return_on_multiple_episodes, sample_one_episode
 from inf58_project.utils import (
@@ -29,57 +29,98 @@ from inf58_project.utils import (
     preprocess_tensor
 )
 
-FLATTENED_ENCODED_SIZE = 19456
+FLATTENED_ENCODED_SIZE = 32 * 9 * 8
 
-class CuriosityA2C_CNN(CuriosityA2C):
+def makeCNNEncoder():
+    return nn.Sequential(
+        nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=0), #16, 43, 38
+        nn.ReLU(),
+        nn.MaxPool2d(kernel_size=2, stride=2), #16, 21, 19
+        nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=0), #32, 19, 17
+        nn.ReLU(),
+        nn.MaxPool2d(kernel_size=2, stride=2), #32, 9, 8 -> 2304
+        nn.Flatten(0), #batch size is 1 anyways
+    )
+
+@dataclass
+class CuriosityA2C_CNN:
+    actor_critic: A2C
+    curiosity: CuriosityAgent
+    feature_extractor:nn.Module
+
     def __init__(self, env, pi_layers=[], v_layers=[], device=None, **kargs):
-        state_dim = np.prod(env.observation_space.shape)
+        # state_dim = env.observation_space.shape # 1, 45, 40
         action_dim = np.prod(flatten_space(env.action_space).shape)
+        self.feature_extractor = makeCNNEncoder()
+        # self.pi_features_extractor = self.feature_extractor
+        # self.v_features_extractor = self.feature_extractor
         self.actor_critic = A2C(
-            nn.Sequential(
-                nn.Conv2d(1, 32, kernel_size=8, stride=4, padding=0),
-                nn.ReLU(),
-                nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
-                nn.ReLU(),
-                nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0),
-                nn.ReLU(),
-                nn.Flatten(0), #batch size is 1 anyways
-                policy_stack([FLATTENED_ENCODED_SIZE] + pi_layers + [action_dim]).to(device),
-            ),
-            nn.Sequential(
-                nn.Conv2d(1, 32, kernel_size=8, stride=4, padding=0),
-                nn.ReLU(),
-                nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
-                nn.ReLU(),
-                nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0),
-                nn.ReLU(),
-                nn.Flatten(0), #batch size is 1 anyways
-                sequential_stack([FLATTENED_ENCODED_SIZE] + v_layers + [1]).to(device)
-            )
+            policy_stack([FLATTENED_ENCODED_SIZE] + pi_layers + [action_dim]).to(device),
+            sequential_stack([FLATTENED_ENCODED_SIZE] + v_layers + [1]).to(device)
         )
-        """
-        Same as in stable_baselines3 with CnnPolicy
-        CNN from DQN Nature paper:
-            Mnih, Volodymyr, et al.
-            "Human-level control through deep reinforcement learning."
-            Nature 518.7540 (2015): 529-533.
-        """
-        self.encoder = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=8, stride=4, padding=0),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
-            nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0),
-            nn.ReLU(),
-            nn.Flatten(0), #batch size is 1 anyways
-        )
+        # self.encoder = self.feature_extractor
         self.curiosity = CuriosityAgent(FLATTENED_ENCODED_SIZE, action_dim, **kargs).to(device)
 
-    # def load(self, checkpoint):
-    #     self.actor_critic.pi_actor.load_state_dict(checkpoint["pi_actor"])
-    #     self.actor_critic.v_critic.load_state_dict(checkpoint["v_critic"])
-    #     self.curiosity.load_state_dict(checkpoint["curiosity"])
-        
+    def extract_features(self, raw_state, device):
+        return self.feature_extractor(torch.tensor(raw_state/255.0, dtype=torch.float32)).unsqueeze(0).to(device)
+
+    def load(self, checkpoint):
+        self.actor_critic.pi_actor.load_state_dict(checkpoint["pi_actor"])
+        self.actor_critic.v_critic.load_state_dict(checkpoint["v_critic"])
+        self.curiosity.load_state_dict(checkpoint["curiosity"])
+        self.feature_extractor.load_state_dict(checkpoint["feature_extractor"])
+        # self.pi_features_extractor.load_state_dict(checkpoint["pi_features_extractor"])
+        # self.v_features_extractor.load_state_dict(checkpoint["v_features_extractor"])
+        # self.encoder.load_state_dict(checkpoint["encoder"])
+
+def get_loss_cnn(
+    agent:CuriosityA2C_CNN,
+    state:np.ndarray,
+    action:int,
+    next_state:np.ndarray,
+    extrinsic_reward:int,
+    done:bool,
+    *,
+    intrinsic_reward_integration: float,
+    device,
+    gamma: float,
+    policy_weight: float,
+    encoding,
+    verbose=False
+):
+    state = encoding(state, device)
+    next_state = encoding(next_state, device)
+    action_tensor = preprocess_tensor(action_to_proba(action, 5), device)
+    value = agent.actor_critic.v_critic(state)
+    next_value = agent.actor_critic.v_critic(next_state)
+    reward = (
+        (1 - intrinsic_reward_integration)*
+        + extrinsic_reward
+        + intrinsic_reward_integration
+        * agent.curiosity(state, action_tensor, next_state)
+    )
+
+    advantage = reward + (1 - done) * gamma * next_value - value
+    actions_probas = agent.actor_critic.pi_actor(state)
+    actor_loss = -torch.log(actions_probas).mean() * advantage.detach()
+    critic_loss = 0.5 * advantage.pow(2)
+    reg_loss = agent.curiosity.loss(
+        state,
+        action_tensor,
+        next_state,
+    ).unsqueeze(0)
+    if verbose:
+        sys.stdout.write("-------------------\n")
+        sys.stdout.write(f"actions_probas{actions_probas}\n")
+        sys.stdout.write(f"advantage {advantage.item() }\n")
+        # sys.stdout.write(f"entropy {cross_entropy(actions_probas,actions_probas)}\n")
+        sys.stdout.write(f"reward {reward.item()}\n")
+        sys.stdout.write(f"loss {(actor_loss.item(),critic_loss.item(),reg_loss.item())}\n")
+        # sys.stdout.write(f"value {value.item()}\n")
+        # sys.stdout.write(f"nextvalue {next_value.item()}\n")
+        # sys.stdout.write(f"int {intrinsic_reward_integration}\n")
+    return policy_weight * (actor_loss + critic_loss) + reg_loss
+
 def train_actor_critic_curiosity_CNN(
     env: gymnasium.Env,
     device,
@@ -93,6 +134,7 @@ def train_actor_critic_curiosity_CNN(
     checkpoint_path: str|None = None,
     intrinsic_reward_integration: float = 0.2,
     policy_weight: float = 1.5,
+    verbose: bool = True
 ) -> Tuple[CuriosityA2C_CNN, List[float]]:
     r"""
     Train a policy using the actor_critic algorithm with integrated curiosity.
@@ -124,6 +166,8 @@ def train_actor_critic_curiosity_CNN(
         the importance of the intrinsic (curiosity) reward relative to the extrinsic one
     policy_weight: float
         the importance of the policy loss in the total loss
+    verbose: bool
+        whether or not we display all the info while running
 
     Returns
     -------
@@ -141,7 +185,8 @@ def train_actor_critic_curiosity_CNN(
         channels_next_state=[5],
         channels_action=[10],
     )
-    input(agent)
+    print(agent)
+    input("press Enter to continue...")
     control_agent = deepcopy(agent.actor_critic.pi_actor)
 
     optimizer = torch.optim.Adam(
@@ -149,17 +194,21 @@ def train_actor_critic_curiosity_CNN(
             agent.actor_critic.pi_actor.parameters(),
             agent.actor_critic.v_critic.parameters(),
             agent.curiosity.parameters(),
+            agent.feature_extractor.parameters(),
         ),
-        weight_decay=0.001,
         lr=learning_rate,
-        weight_decay = .01,
+        weight_decay = 0.01,
     )
     buffer = ReplayBuffer(1000)
 
     for episode in range(1,num_train_episodes+1):
         sys.stdout.write("ep {}\n".format(episode))
         episode_states, episode_actions, episode_rewards, _ = sample_one_episode(
-            env, control_agent, max_episode_duration, render=False
+            env, 
+            control_agent, 
+            max_episode_duration, 
+            render=False, 
+            feature_extractor=agent.extract_features
         )
 
         ep_len = len(episode_rewards)
@@ -173,10 +222,10 @@ def train_actor_critic_curiosity_CNN(
                 t == ep_len -1 ,
             )
             state, action, next_state, extrinsic_reward,done = buffer.sample()
-            assert (state != next_state).any() or done 
+            #assert (state != next_state).any() or done 
 
             optimizer.zero_grad()
-            get_loss(
+            get_loss_cnn(
                 agent,
                 state,
                 action,
@@ -187,7 +236,8 @@ def train_actor_critic_curiosity_CNN(
                 gamma=gamma,
                 device=device,
                 policy_weight=policy_weight,
-                encoding=agent.encoder
+                encoding=agent.extract_features,
+                verbose=verbose
             ).backward()
             optimizer.step()
         if episode % 50 == 0:
@@ -216,6 +266,10 @@ def train_actor_critic_curiosity_CNN(
                 "pi_actor": agent.actor_critic.pi_actor.state_dict(),
                 "v_critic": agent.actor_critic.v_critic.state_dict(),
                 "curiosity": agent.curiosity.state_dict(),
+                "feature_extractor": agent.feature_extractor.state_dict(),
+                # "pi_features_extractor":agent.pi_features_extractor.state_dict(),
+                # "v_features_extractor":agent.v_features_extractor.state_dict(),
+                # "encoder":agent.encoder.state_dict(),
                 "optimizer": optimizer.state_dict(),
                 }, savefile_name
             )

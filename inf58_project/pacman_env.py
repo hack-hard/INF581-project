@@ -8,12 +8,12 @@ BACKGROUND_COLOR = 64
 SKIPPED_FRAME_COUNT = 28 * 4
 
 class PacManEnv(gymnasium.Env):
-    def __init__(self, debug=False, resize_factor=4):
+    def __init__(self, render_mode=None, debug=False, resize_factor=4):
         super().__init__()
         self.game = gymnasium.make(
             id="ALE/Pacman-v5",
             full_action_space=False,  # action space is Discrete(5) for NOOP, UP, RIGHT, LEFT, DOWN
-            render_mode="human",
+            render_mode=render_mode, #human
             frameskip=1,
             repeat_action_probability=0,
             obs_type="grayscale",  # observation_space=Box(0, 255, (128,), np.uint8)
