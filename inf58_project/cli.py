@@ -18,9 +18,10 @@ import click
 
 from inf58_project.utils import encode_state, preprocess_tensor
 
+
 @click.command()
-@click.option("--checkpoint", default=None) 
-@click.option("--nb_iteration", default = 100)
+@click.option("--checkpoint", default=None)
+@click.option("--nb_iteration", default=10000)
 def main(checkpoint: str | None, nb_iteration: int):  # pragma: no cover
     """
     The main function executes on commands:
@@ -49,8 +50,8 @@ def main(checkpoint: str | None, nb_iteration: int):  # pragma: no cover
     device = torch.device("cpu")
     agent = CuriosityA2C(
         env,
-        pi_layers=[200],
-        v_layers=[200, 10],
+        pi_layers=[200, 10],
+        v_layers=[200, 10, 5],
         device=device,
         channels_embedding=[10],
         channels_next_state=[23],

@@ -129,7 +129,7 @@ def get_loss(
     ) * +extrinsic_reward + intrinsic_reward_integration * agent.curiosity(
         state_tensor, action_tensor, next_state_tensor
     )
-    reward = 1
+    # reward = 1
 
     advantage = reward + (1 - done) * gamma * next_value - value
     actions_probas = agent.actor_critic.pi_actor(state_tensor) + 1e-8
@@ -162,11 +162,15 @@ def get_loss(
         policy_weight * (actor_loss + critic_loss)
         + reg_loss
         # - torch.log( actions_probas).min()
-        + 0.02
+        + 0.002
         * sum(
             map(
                 lambda x: torch.linalg.norm(x.flatten(), 1),
-                agent.actor_critic.pi_actor.parameters(),
+                chain(
+                    agent.actor_critic.pi_actor.parameters(),
+                    agent.actor_critic.v_critic.parameters(),
+                    agent.curiosity.parameters(),
+                ),
             )
         )
     )
@@ -231,7 +235,7 @@ def train_actor_critic_curiosity(
             agent.curiosity.parameters(),
         ),
         lr=learning_rate,
-        weight_decay=0.1,
+        weight_decay=0.001,
     )
     buffer = ReplayBuffer(100 * 1000)
 
@@ -244,14 +248,13 @@ def train_actor_critic_curiosity(
         ep_len = len(episode_rewards)
 
         for t in range(ep_len):
-            for _ in range(1 + int(sum(episode_rewards) / (10 * len(episode_rewards)))):
-                buffer.add(
-                    episode_states[t],
-                    episode_actions[t],
-                    episode_states[min(t + 1, ep_len - 1)],
-                    episode_rewards[t],
-                    t == ep_len - 1,
-                )
+            buffer.add(
+                episode_states[t],
+                episode_actions[t],
+                episode_states[min(t + 1, ep_len - 1)],
+                episode_rewards[t],
+                t == ep_len - 1,
+            )
             state, action, next_state, extrinsic_reward, done = buffer.sample()
             assert (state != next_state).any() or done
 
