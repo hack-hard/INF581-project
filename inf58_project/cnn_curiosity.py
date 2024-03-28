@@ -102,7 +102,7 @@ def get_loss_cnn(
 
     advantage = reward + (1 - done) * gamma * next_value - value
     actions_probas = agent.actor_critic.pi_actor(state)
-    actor_loss = -torch.log(actions_probas).mean() * advantage.detach()
+    actor_loss = -torch.log(actions_probas + 1e-8).mean() * advantage.detach()
     critic_loss = 0.5 * advantage.pow(2)
     reg_loss = agent.curiosity.loss(
         state,
@@ -110,13 +110,14 @@ def get_loss_cnn(
         next_state,
     ).unsqueeze(0)
     if verbose:
-        sys.stdout.write("-------------------\n")
-        sys.stdout.write(f"actions_probas{actions_probas}\n")
-        sys.stdout.write(f"advantage {advantage.item() }\n")
-        # sys.stdout.write(f"entropy {cross_entropy(actions_probas,actions_probas)}\n")
-        sys.stdout.write(f"reward {reward.item()}\n")
-        sys.stdout.write(f"loss {(actor_loss.item(),critic_loss.item(),reg_loss.item())}\n")
-        # sys.stdout.write(f"value {value.item()}\n")
+        pass
+        # sys.stdout.write("-------------------\n")
+        # sys.stdout.write(f"actions_probas{actions_probas}\n")
+        # sys.stdout.write(f"advantage {advantage.item() }\n")
+        # # sys.stdout.write(f"entropy {cross_entropy(actions_probas,actions_probas)}\n")
+        # sys.stdout.write(f"reward {reward.item()}\n")
+        # sys.stdout.write(f"loss {(actor_loss.item(),critic_loss.item(),reg_loss.item())}\n")
+        # # sys.stdout.write(f"value {value.item()}\n")
         # sys.stdout.write(f"nextvalue {next_value.item()}\n")
         # sys.stdout.write(f"int {intrinsic_reward_integration}\n")
     return policy_weight * (actor_loss + critic_loss) + reg_loss
@@ -199,10 +200,10 @@ def train_actor_critic_curiosity_CNN(
         lr=learning_rate,
         weight_decay = 0.01,
     )
-    buffer = ReplayBuffer(1000)
+    buffer = ReplayBuffer(10000)
 
     for episode in range(1,num_train_episodes+1):
-        sys.stdout.write("ep {}\n".format(episode))
+        print('.',end='',flush=True)
         episode_states, episode_actions, episode_rewards, _ = sample_one_episode(
             env, 
             control_agent, 
@@ -251,6 +252,7 @@ def train_actor_critic_curiosity_CNN(
                 policy_nn=agent.actor_critic.pi_actor,
                 num_test_episode=num_test_per_episode,
                 max_episode_duration=max_episode_duration,
+                feature_extractor=agent.extract_features,
                 render=False,
             )
 
