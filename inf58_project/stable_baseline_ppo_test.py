@@ -3,6 +3,7 @@ import gymnasium
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_atari_env
 from stable_baselines3.common.env_checker import check_env
+from stable_baselines3.common.monitor import Monitor
 
 from inf58_project.pacman_env import PacManEnv
 
@@ -20,7 +21,10 @@ from inf58_project.pacman_env import PacManEnv
 #     n_envs=4
 # )
 
+LOG_DIR = "logs/"
+
 env = PacManEnv(debug=False)
+env = Monitor(env, LOG_DIR)
 # print(env.observation_space)
 # check_env(env)
 # print("check env done")
@@ -28,6 +32,7 @@ model = PPO(
     "CnnPolicy", 
     env, 
     verbose=1, 
+    tensorboard_log=LOG_DIR,
     policy_kwargs=dict(normalize_images=False),
     n_steps=2048,
     batch_size=64
@@ -35,11 +40,11 @@ model = PPO(
 print("learning")
 for i in range(1,11):
     model.learn(total_timesteps=100*1000)
-    model.save("saved_models/ppo_{}e5_steps".format(i))
+    model.save("saved_models/ppo_{}e5_steps_resized".format(i))
 
 # del model # remove to demonstrate saving and loading
 
-# model = PPO.load("saved_models/ppo_1e7_steps")
+# model = PPO.load("saved_models/ppo_6e5_steps")
 
 # obs, info = env.reset()
 # done = False
